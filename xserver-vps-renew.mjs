@@ -702,6 +702,14 @@ async function main() {
     const nextRunStr = resolveNextRun();
     const executedAt = formatTokyoDateTime();
 
+    // 持久化前先读取历史记录数：非持久化部署（容器每轮重建、状态文件随容器丢失）
+    // 无历史累计，通知应展示「本轮续期成功」而非恒为 1 的「已连续成功 N 次」
+    const { totalRuns: priorTotalRuns } = getRenewalStatus(
+      RENEWAL_STATUS_FILE,
+      ALERT_AFTER_CONSECUTIVE_FAILURES,
+      LOGGER,
+    );
+
     // 持久化续期成功记录（使用配置的状态文件路径）
     persistRenewalRecord(buildRenewalRecord({
       success: true,
@@ -732,6 +740,7 @@ async function main() {
       durationMs: elapsedMs(),
       remainingHours: renewalData.remainingHours,
       consecutiveSuccesses,
+      hasHistory: priorTotalRuns > 0,
     }), { kind: 'success' });
     // 安全关闭：close 抛错不误入 catch（续期已成功且记录已持久化，误报失败会引发恐慌）
     await safeClosePage(page, LOGGER);

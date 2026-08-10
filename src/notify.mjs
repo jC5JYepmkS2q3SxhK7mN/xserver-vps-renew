@@ -338,6 +338,9 @@ export function formatTurnstileNotifyLine({ providerName, attempts } = {}) {
  * @param {string|null} [params.durationText] - 已格式化的耗时文案（优先于 durationMs）
  * @param {number|null} [params.remainingHours] - 续期前剩余小时（可选）
  * @param {number|null} [params.consecutiveSuccesses] - 含本轮在内的连续成功次数（可选）
+ * @param {boolean} [params.hasHistory=true] - 持久化状态中是否存在历史记录；
+ *   非持久化部署（容器每轮重建、状态文件随容器丢失）下无历史累计，
+ *   「已连续成功 N 次」恒为 1 会误导，改为展示「本轮续期成功」
  * @returns {string}
  */
 export function buildSuccessNotifyMessage({
@@ -355,6 +358,7 @@ export function buildSuccessNotifyMessage({
   durationText = null,
   remainingHours = null,
   consecutiveSuccesses = null,
+  hasHistory = true,
 }) {
   const mode = parseNotifyDetail(detail);
   const time = escapeHtml(executedAt || formatTokyoDateTime());
@@ -368,10 +372,13 @@ export function buildSuccessNotifyMessage({
   const remainingLine = remainingHours != null && Number.isFinite(Number(remainingHours))
     ? `⏳ 续期前剩余: ${escapeHtml(formatRemainingHours(remainingHours))}`
     : '';
-  // 连续成功（含本轮）≥1 时展示，给用户「自动化运行稳定」的直观信号
-  const streakLine = consecutiveSuccesses != null && Number(consecutiveSuccesses) >= 1
-    ? `📈 已连续成功 ${Number(consecutiveSuccesses)} 次`
-    : '';
+  // 无历史累计（如非持久化部署）时展示「本轮续期成功」，避免恒为 1 的「已连续成功」误导；
+  // 有历史且含本轮连续成功 ≥1 时展示累计次数，给用户「自动化运行稳定」的直观信号
+  const streakLine = hasHistory === false
+    ? '✅ 本轮续期成功'
+    : (consecutiveSuccesses != null && Number(consecutiveSuccesses) >= 1
+      ? `📈 已连续成功 ${Number(consecutiveSuccesses)} 次`
+      : '');
 
   if (mode === TG_NOTIFY_DETAIL_COMPACT) {
     return clampTelegramMessage(

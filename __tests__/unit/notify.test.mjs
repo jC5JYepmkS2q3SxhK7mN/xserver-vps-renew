@@ -319,6 +319,32 @@ describe('buildSuccessNotifyMessage', () => {
     });
     expect(msg).not.toContain('已连续成功');
   });
+
+  it('无历史累计（hasHistory=false）时展示「本轮续期成功」而非连续次数（两模式均生效）', () => {
+    for (const detail of ['full', 'compact']) {
+      const msg = buildSuccessNotifyMessage({
+        serverName: 'vps-1',
+        executedAt: 't',
+        nextRunAt: 'n',
+        consecutiveSuccesses: 1,
+        hasHistory: false,
+        detail,
+      });
+      expect(msg).toContain('本轮续期成功');
+      expect(msg).not.toContain('已连续成功');
+    }
+  });
+
+  it('有历史累计时按连续成功次数展示（默认 hasHistory=true 保持向后兼容）', () => {
+    const msg = buildSuccessNotifyMessage({
+      serverName: 'vps-1',
+      executedAt: 't',
+      nextRunAt: 'n',
+      consecutiveSuccesses: 3,
+    });
+    expect(msg).toContain('已连续成功 3 次');
+    expect(msg).not.toContain('本轮续期成功');
+  });
 });
 
 describe('formatTurnstileNotifyLine / resolveTurnstileProviderLabel', () => {
