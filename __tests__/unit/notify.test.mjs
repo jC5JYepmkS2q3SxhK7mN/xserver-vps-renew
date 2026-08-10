@@ -209,6 +209,7 @@ describe('buildSuccessNotifyMessage', () => {
     expect(msg).toContain('vps-1');
     expect(msg).toContain('2026-07-31');
     expect(msg).toContain('下次检查');
+    expect(msg).toContain('github.com/Silentely');
   });
 
   it('HTML 特殊字符被转义', () => {
@@ -383,6 +384,7 @@ describe('buildSkipNotifyMessage', () => {
     expect(msg).toContain('下次检查');
     expect(msg).toContain('执行过程');
     expect(msg).toContain('1. 登录成功');
+    expect(msg).toContain('github.com/Silentely');
   });
 
   it('compact 保留关键状态与距窗口，省略规格、判定详情与过程', () => {
@@ -462,6 +464,7 @@ describe('buildManualConfirmNotifyMessage', () => {
     expect(msg).toContain('同意页未找到同意复选框');
     expect(msg).toContain('2026-08-05 13:00:00');
     expect(msg).toContain('2026-08-05 19:00:00');
+    expect(msg).toContain('github.com/Silentely');
   });
 
   it('原因中的 HTML 特殊字符被转义', () => {
@@ -577,6 +580,7 @@ describe('buildFailureNotifyMessage', () => {
     expect(msg).toContain('1. 登录成功');
     expect(msg).toContain('timeout');
     expect(msg).toContain('失败说明');
+    expect(msg).toContain('https://github.com/Silentely/xserver-vps-renew');
   });
 
   it('compact 仅核心错误，无过程与失败说明', () => {
@@ -593,6 +597,7 @@ describe('buildFailureNotifyMessage', () => {
     expect(msg).not.toContain('执行过程');
     expect(msg).not.toContain('失败说明');
     expect(msg).not.toContain('hint');
+    expect(msg).toContain('github.com/Silentely');
   });
 
   it('多平台全挂时发出最高级删机风险告警', () => {

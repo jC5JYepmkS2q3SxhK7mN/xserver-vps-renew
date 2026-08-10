@@ -28,7 +28,7 @@
 import { addExtra } from 'puppeteer-extra';
 import rebrowserPuppeteer from 'rebrowser-puppeteer-core';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { injectBrowserFingerprint } from './browser-fingerprint-patch.js';
@@ -71,6 +71,7 @@ import {
   findChromePath,
   cleanChromeLocks,
   formatTokyoDateTime,
+  PROJECT_SOURCE_LINE,
   DEFAULT_LOG_LEVEL,
   LOG_LEVEL_DEBUG,
   LOG_LEVEL_INFO,
@@ -104,6 +105,11 @@ import {
 
 /** 默认 Keras 验证码识别 API（Cloud Run，可被 CAPTCHA_API 覆盖） */
 const DEFAULT_CAPTCHA_API = 'https://captcha-120546510085.asia-northeast1.run.app';
+
+// 运行时版本号（单一来源：package.json；启动横幅展示，便于核对运行的是哪个版本）
+const PROJECT_VERSION = JSON.parse(
+  readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
+).version;
 
 // 使用 rebrowser-puppeteer-core 替代原生 puppeteer-core
 // rebrowser-patches 修复了 Runtime.Enable 泄露检测，避免被 Cloudflare Turnstile 识别为自动化浏览器
@@ -328,7 +334,8 @@ function persistRenewalRecord(record) {
 
 async function main() {
   const startedAtMs = Date.now();
-  log('========== Xserver VPS 自动续期开始 ==========');
+  log(`========== Xserver VPS 自动续期 v${PROJECT_VERSION} ==========`);
+  log(`🔗 ${PROJECT_SOURCE_LINE}`);
   log(
     `日志级别: ${CONFIG.LOG_LEVEL}`
     + ` | 时区: ${process.env.TZ || 'Asia/Tokyo'}`

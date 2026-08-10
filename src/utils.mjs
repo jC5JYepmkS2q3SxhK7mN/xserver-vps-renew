@@ -9,6 +9,15 @@ import { join } from 'node:path';
 /** 东京时区相对 UTC 的固定偏移（毫秒），日本无夏令时 */
 export const TOKYO_OFFSET_MS = 9 * 3600_000;
 
+/** 项目 GitHub 仓库地址（启动日志与失败通知共用，唯一来源） */
+export const PROJECT_REPO_URL = 'https://github.com/Silentely/xserver-vps-renew';
+
+/** 项目版权署名（MIT 许可要求保留版权声明；单一来源，可随时改名） */
+export const PROJECT_COPYRIGHT = '© 2026 Silentely';
+
+/** 源项目标识行：启动横幅与各类通知尾部统一展示，让使用者始终知晓第一来源（防冒充/转售） */
+export const PROJECT_SOURCE_LINE = `🔗 源项目: ${PROJECT_REPO_URL} · ${PROJECT_COPYRIGHT}（MIT License）`;
+
 /**
  * 脱敏代理/主机地址：保留末尾 4 个字符，其余替换为 *
  * 长度 ≤4 时原样返回（每个字符后不足 4 位，正则不匹配）

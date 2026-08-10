@@ -6,7 +6,7 @@
  * renewal-logic.mjs 仅保留续期业务判定逻辑。
  */
 
-import { escapeHtml, formatTokyoDateTime } from './utils.mjs';
+import { escapeHtml, formatTokyoDateTime, PROJECT_SOURCE_LINE } from './utils.mjs';
 import { FREE_VPS_MAX_HOURS, RENEWAL_WINDOW_HOURS } from './renewal-logic.mjs';
 import { isTurnstileOutageError, TURNSTILE_ALL_PROVIDERS_FAILED } from './turnstile.mjs';
 
@@ -382,7 +382,8 @@ export function buildSuccessNotifyMessage({
       `${turnstileLine ? `${turnstileLine}\n` : ''}` +
       `${streakLine ? `${streakLine}\n` : ''}` +
       `${durationLine ? `${durationLine}\n` : ''}` +
-      `⏭️ 下次检查: ${next}`,
+      `⏭️ 下次检查: ${next}\n` +
+      PROJECT_SOURCE_LINE,
     );
   }
 
@@ -398,7 +399,8 @@ export function buildSuccessNotifyMessage({
     `${streakLine ? `${streakLine}\n` : ''}` +
     `${durationLine ? `${durationLine}\n` : ''}` +
     `⏭️ 下次检查: ${next}` +
-    formatProcessSteps(processSteps, mode),
+    formatProcessSteps(processSteps, mode) +
+    `\n${PROJECT_SOURCE_LINE}`,
   );
 }
 
@@ -485,7 +487,9 @@ export function buildSkipNotifyMessage({
   if (durationLine) lines.push(durationLine);
   lines.push(`⏭️ 下次检查: ${next}`);
 
-  return clampTelegramMessage(lines.join('\n') + formatProcessSteps(processSteps, mode));
+  return clampTelegramMessage(
+    lines.join('\n') + formatProcessSteps(processSteps, mode) + `\n${PROJECT_SOURCE_LINE}`,
+  );
 }
 
 /**
@@ -523,6 +527,8 @@ export function buildManualConfirmNotifyMessage({
   if (nextRunAt) {
     lines.push(`⏭️ 下次执行: ${nextRunAt}`);
   }
+  // 尾部统一标注源项目，告知使用者第一来源（防冒充/转售）
+  lines.push('', PROJECT_SOURCE_LINE);
   return clampTelegramMessage(lines.join('\n'));
 }
 
@@ -880,13 +886,16 @@ export function buildFailureNotifyMessage({
       : ''}`;
 
   if (mode === TG_NOTIFY_DETAIL_COMPACT) {
-    return clampTelegramMessage(head.trimEnd());
+    // compact 同样标注源项目，保证任何失败通知都能找到第一来源
+    return clampTelegramMessage(`${head.trimEnd()}\n${PROJECT_SOURCE_LINE}`);
   }
 
   const failHints = buildFailureHints({
     category: failureMeta.category,
     captchaMaxRetry,
   });
+  // 排查入口：失败通知附源项目标识行（源地址 + 版权 + 许可），便于查阅文档或反馈问题
+  const sourceLine = `\n${PROJECT_SOURCE_LINE}`;
 
   // proxyHint 为空时避免产生多余空行（head 末尾恒有 \n，空提示只需补一个 \n 形成单一空行）
   const hintBlock = proxyHint ? `\n${proxyHint}\n\n` : '\n';
@@ -894,7 +903,8 @@ export function buildFailureNotifyMessage({
     head +
     hintBlock +
     failHints +
-    formatProcessSteps(processSteps, mode),
+    formatProcessSteps(processSteps, mode) +
+    sourceLine,
   );
 }
 

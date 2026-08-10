@@ -16,6 +16,9 @@ import {
   analyzeFingerprintHealth,
   shouldSaveTurnstileScreenshot,
   TOKYO_OFFSET_MS,
+  PROJECT_REPO_URL,
+  PROJECT_COPYRIGHT,
+  PROJECT_SOURCE_LINE,
   DEFAULT_LOG_LEVEL,
   LOG_LEVEL_DEBUG,
   LOG_LEVEL_INFO,
@@ -56,6 +59,17 @@ describe('getTokyoDateString', () => {
 
   it('导出的偏移常量正确', () => {
     expect(TOKYO_OFFSET_MS).toBe(9 * 3600_000);
+  });
+
+  it('导出项目仓库地址常量', () => {
+    expect(PROJECT_REPO_URL).toBe('https://github.com/Silentely/xserver-vps-renew');
+  });
+
+  it('导出版权署名与源项目标识行（含地址/版权/许可）', () => {
+    expect(PROJECT_COPYRIGHT).toBe('© 2026 Silentely');
+    expect(PROJECT_SOURCE_LINE).toContain(PROJECT_REPO_URL);
+    expect(PROJECT_SOURCE_LINE).toContain(PROJECT_COPYRIGHT);
+    expect(PROJECT_SOURCE_LINE).toContain('MIT License');
   });
 });
 

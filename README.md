@@ -1,5 +1,7 @@
 # Xserver VPS 自动续期
 
+[![GitHub 仓库](https://img.shields.io/badge/GitHub-Silentely%2Fxserver--vps--renew-181717?logo=github&logoColor=white)](https://github.com/Silentely/xserver-vps-renew)
+
 自动为 [Xserver](https://vps.xserver.ne.jp/) 免费 VPS 续期：在可续期窗口内完成登录、验证码识别与提交。
 
 > **官方 4GB 规则（2026-07 起）**  
@@ -363,7 +365,11 @@ npm run test:watch
 
 ## 📜 许可证
 
-MIT
+本项目基于 **MIT License** 开源，版权所有 © 2026 Silentely。
+
+- **源项目（第一来源）**：https://github.com/Silentely/xserver-vps-renew
+- 本项目为**开源免费工具**。任何声称「付费独家版 / 代购服务」的转售均属非官方行为——项目运行时（启动日志与各类通知）均会标注源项目地址，请以该地址核对来源后再决定是否付费。
+- 完整条款见 [LICENSE](LICENSE)。
 
 ---
 
