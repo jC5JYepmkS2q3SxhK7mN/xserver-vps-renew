@@ -490,6 +490,9 @@ describe('buildManualConfirmNotifyMessage', () => {
     expect(msg).toContain('同意页未找到同意复选框');
     expect(msg).toContain('2026-08-05 13:00:00');
     expect(msg).toContain('2026-08-05 19:00:00');
+    // 用词与成功/失败/跳过通知统一为「下次检查」
+    expect(msg).toContain('下次检查');
+    expect(msg).not.toContain('下次执行');
     expect(msg).toContain('github.com/Silentely');
   });
 
@@ -592,6 +595,33 @@ describe('buildFailureNotifyMessage', () => {
     });
     expect(msg).toContain('告警升级');
     expect(msg).toContain('连续失败 5 次');
+  });
+
+  it('验证码重试次数 >1 时在失败通知中展示（full/compact 均生效）', () => {
+    for (const detail of ['full', 'compact']) {
+      const msg = buildFailureNotifyMessage({
+        errorMessage: '验证码识别失败',
+        executedAt: 't',
+        captchaMaxRetry: 3,
+        captchaRetries: 3,
+        detail,
+        proxyHint: '',
+      });
+      expect(msg).toContain('验证码识别已重试 3 次');
+      expect(msg).toContain('上限 3');
+    }
+  });
+
+  it('验证码重试次数 ≤1 时不展示重试行（避免噪音）', () => {
+    for (const retries of [0, 1, undefined]) {
+      const msg = buildFailureNotifyMessage({
+        errorMessage: 'x',
+        executedAt: 't',
+        captchaRetries: retries,
+        proxyHint: '',
+      });
+      expect(msg).not.toContain('验证码识别已重试');
+    }
   });
 
   it('full 可附带执行过程摘要与失败说明', () => {

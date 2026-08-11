@@ -25,7 +25,7 @@ import { resolveTurnstileProviderLabel } from './notify.mjs';
  * Cloudflare Turnstile 会分析鼠标移动模式来判定是否为自动化
  * @param {import('puppeteer').Page} page
  */
-export async function humanMouseMove(page, fromX, fromY, toX, toY) {
+async function humanMouseMove(page, fromX, fromY, toX, toY) {
   const steps = 15 + Math.floor(Math.random() * 10); // 15-25 步
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
@@ -48,7 +48,7 @@ export async function humanMouseMove(page, fromX, fromY, toX, toY) {
  * @param {object} [logger=NOOP_LOGGER] - 分级日志对象
  * @returns {Promise<boolean>}
  */
-export async function clickTurnstileFallback(page, logger = NOOP_LOGGER) {
+async function clickTurnstileFallback(page, logger = NOOP_LOGGER) {
   try {
     logger.debug('尝试点击 Turnstile checkbox...');
     const frames = page.frames();
@@ -179,8 +179,6 @@ export async function waitForTurnstile(page, { config, logger = NOOP_LOGGER } = 
     return {
       sitekey: div.getAttribute('data-sitekey'),
       callback: div.getAttribute('data-callback'),
-      theme: div.getAttribute('data-theme') || '(默认)',
-      action: div.getAttribute('data-action') || '(无)',
     };
   }).catch(() => null);
 

@@ -9,6 +9,7 @@ import {
   parseEnvBool,
   shouldLog,
   formatLogLine,
+  clampLogMessage,
   NOOP_LOGGER,
   escapeHtml,
   formatTokyoDateTime,
@@ -165,6 +166,29 @@ describe('formatLogLine', () => {
   it('未知级别回退 [INFO]，空消息输出空内容', () => {
     expect(formatLogLine('t', 'nope', 'x')).toBe('t [INFO] x');
     expect(formatLogLine('t', 'info', null)).toBe('t [INFO] ');
+  });
+});
+
+describe('clampLogMessage', () => {
+  it('短消息原样返回', () => {
+    expect(clampLogMessage('普通日志')).toBe('普通日志');
+    expect(clampLogMessage('')).toBe('');
+    expect(clampLogMessage(null)).toBe('');
+  });
+
+  it('超长消息截断并保留截断标记', () => {
+    const long = 'x'.repeat(5000);
+    const out = clampLogMessage(long, 3000);
+    expect(out.length).toBeLessThan(3200);
+    expect(out).toContain('日志过长已截断');
+    expect(out).toContain('共5000字符');
+  });
+
+  it('上限低于最小值时回退到安全下限（128）', () => {
+    const long = 'y'.repeat(500);
+    const out = clampLogMessage(long, 10);
+    expect(out.length).toBeGreaterThanOrEqual(128);
+    expect(out).toContain('日志过长已截断');
   });
 });
 

@@ -152,6 +152,27 @@ function t(text) {
                 animation: none;
             }
         }
+        /* 标题行：图标 + 脚本名 + 关闭按钮 */
+        #vps-renewal-progress .vps-renewal-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+        #vps-renewal-progress .vps-renewal-close {
+            cursor: pointer;
+            opacity: 0.75;
+            font-size: 13px;
+            line-height: 1;
+            padding: 0 2px;
+            border-radius: 4px;
+        }
+        #vps-renewal-progress .vps-renewal-close:hover {
+            opacity: 1;
+            background: rgba(255, 255, 255, 0.15);
+        }
     `);
  
     // 等待DOM加载完成
@@ -180,6 +201,15 @@ function t(text) {
             }
         });
     }
+
+    // 成功状态自动收起定时器（防残留遮挡页面内容）
+    let autoHideTimer = null;
+    function clearAutoHide() {
+        if (autoHideTimer) {
+            clearTimeout(autoHideTimer);
+            autoHideTimer = null;
+        }
+    }
  
     /**
      * 创建一个状态提示元素并显示消息
@@ -194,7 +224,30 @@ function t(text) {
         // 无障碍：状态区域对读屏软件播报更新
         statusEl.setAttribute('role', 'status');
         statusEl.setAttribute('aria-live', 'polite');
-        statusEl.textContent = t(message);
+
+        // 标题行（脚本名 + 手动关闭按钮）
+        const titleRow = document.createElement('div');
+        titleRow.className = 'vps-renewal-title';
+        const titleText = document.createElement('span');
+        titleText.textContent = '🔄 Xserver VPS 自动续期';
+        const closeBtn = document.createElement('span');
+        closeBtn.className = 'vps-renewal-close';
+        closeBtn.textContent = '✕';
+        closeBtn.title = '关闭提示';
+        closeBtn.setAttribute('aria-label', '关闭提示');
+        closeBtn.addEventListener('click', () => {
+            clearAutoHide();
+            removeStatusElement();
+        });
+        titleRow.appendChild(titleText);
+        titleRow.appendChild(closeBtn);
+        statusEl.appendChild(titleRow);
+
+        // 消息行
+        const bodyEl = document.createElement('div');
+        bodyEl.textContent = t(message);
+        statusEl.appendChild(bodyEl);
+
         document.body.appendChild(statusEl);
     }
  
@@ -207,13 +260,27 @@ function t(text) {
         const statusEl = document.getElementById('vps-renewal-progress');
         if (statusEl) {
             statusEl.setAttribute('data-state', state || 'info');
-            statusEl.textContent = t(message);
+            const bodyEl = statusEl.querySelector('.vps-renewal-body')
+                || statusEl.appendChild(document.createElement('div'));
+            bodyEl.className = 'vps-renewal-body';
+            bodyEl.textContent = t(message);
         } else {
             createStatusElement(message, state);
+        }
+
+        // 成功状态 3s 后自动收起（成功说明流程已完成，无持续提示必要）；
+        // 每次更新重置定时器，避免「无需续期」等连续 success 更新残留
+        clearAutoHide();
+        if ((state || 'info') === 'success') {
+            autoHideTimer = setTimeout(() => {
+                autoHideTimer = null;
+                removeStatusElement();
+            }, 3000);
         }
     }
  
     function removeStatusElement() {
+        clearAutoHide();
         const statusEl = document.getElementById('vps-renewal-progress');
         if (statusEl) {
             statusEl.remove();
@@ -334,7 +401,6 @@ function t(text) {
             } else {
                 console.log(`${LOG_PREFIX} 条件不满足：无需执行续期操作。`);
                 updateStatusElement("当前VPS无需续期。", 'success');
-                setTimeout(removeStatusElement, 3000);
             }
         } catch (e) {
             console.error(`${LOG_PREFIX} 在VPS管理主页处理出现错误:`, e);
@@ -471,32 +537,58 @@ function t(text) {
  
             console.log(`${LOG_PREFIX} Cloudflare 令牌不存在，设置监听器等待生成...`);
             updateStatusElement("等待人机验证令牌生成...");
- 
+
+            // cf-turnstile-response 输入框缺失（页面结构变化/改版）：直接提示人工完成，
+            // 避免后续 observer.observe(null) 抛 TypeError 被笼统当作「验证码处理异常」
+            if (!cf) {
+                console.warn(`${LOG_PREFIX} 未找到 cf-turnstile-response 输入框，无法自动提交，请手动完成。`);
+                updateStatusElement("未找到人机验证组件，请手动完成验证后提交。", 'warn');
+                return;
+            }
+
             // 设置超时机制防止无限等待。
             // 与主脚本策略一致：Turnstile 未通过时禁止强制提交（否则必然「認証に失敗」），
             // 超时仅提示用户手动完成人机验证，不自动提交表单。
+            let pollId = null;
+            let observer = null;
             const timeoutId = setTimeout(() => {
+                if (pollId) clearInterval(pollId);
+                if (observer) observer.disconnect();
                 console.warn(`${LOG_PREFIX} Cloudflare Turnstile令牌生成超时，未自动提交（强制提交必然认证失败）。`);
                 updateStatusElement("人机验证响应超时，请手动完成人机验证后再提交。", 'warn');
             }, 15000);
- 
-            // 监听cf-turnstile-response字段的value属性变化
-            const observer = new MutationObserver((mutationsList) => {
+
+            // 轮询主路径：cf-turnstile-response 的 value 由 Turnstile 内部 JS 以 property 赋值写入，
+            // MutationObserver 的 attributeFilter:['value'] 只能捕捉 setAttribute（attribute 变化），
+            // property 赋值不触发 observer，仅靠监听会恒等 15s 超时，故以 500ms 轮询为主。
+            pollId = setInterval(() => {
+                if (cf.value) {
+                    clearTimeout(timeoutId);
+                    clearInterval(pollId);
+                    if (observer) observer.disconnect();
+                    console.log(`${LOG_PREFIX} Cloudflare 令牌已生成（轮询命中），正在提交表单...`);
+                    submitForm();
+                }
+            }, 500);
+
+            // attribute 变化兜底（部分实现用 setAttribute 写入）
+            observer = new MutationObserver((mutationsList) => {
                 for (const mutation of mutationsList) {
                     if (
                         mutation.type === 'attributes' &&
                         mutation.attributeName === 'value' &&
                         cf.value
                     ) {
-                        console.log(`${LOG_PREFIX} Cloudflare 令牌已生成，正在提交表单...`);
                         clearTimeout(timeoutId);
+                        clearInterval(pollId);
                         observer.disconnect();
+                        console.log(`${LOG_PREFIX} Cloudflare 令牌已生成（attribute 变化），正在提交表单...`);
                         submitForm();
                         return;
                     }
                 }
             });
- 
+
             observer.observe(cf, { attributes: true, attributeFilter: ['value'] });
  
         } catch (error) {

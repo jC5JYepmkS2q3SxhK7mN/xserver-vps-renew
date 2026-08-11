@@ -16,19 +16,19 @@ export const FREE_VPS_MAX_HOURS = 24;
 export const RENEWAL_WINDOW_HOURS = 12;
 
 /** 略过期仍尝试续期的宽限（小时），覆盖时钟偏差/页面延迟 */
-export const RENEWAL_OVERDUE_GRACE_HOURS = 1;
+const RENEWAL_OVERDUE_GRACE_HOURS = 1;
 
 /** 提交后明确失败关键词 */
-export const FAILURE_PATTERNS = ['認証に失敗', '失敗しました', 'エラーが発生', '不正なアクセス'];
+const FAILURE_PATTERNS = ['認証に失敗', '失敗しました', 'エラーが発生', '不正なアクセス'];
 
 /** 其他错误关键词（非可重试硬失败） */
-export const ERROR_PATTERNS = ['エラー', '不正', 'もう一度'];
+const ERROR_PATTERNS = ['エラー', '不正', 'もう一度'];
 
 /** 明确成功关键词（长词优先，避免短词误匹配） */
-export const SUCCESS_PATTERNS = ['手続きが完了', '更新が完了', '延長しました', '完了しました'];
+const SUCCESS_PATTERNS = ['手続きが完了', '更新が完了', '延長しました', '完了しました'];
 
 /** 业务侧已知失败原因 */
-export const KNOWN_FAILURE_REASONS = [
+const KNOWN_FAILURE_REASONS = [
   { pattern: 'クレジットカード', reason: '需要绑定信用卡才能续期' },
   { pattern: 'カード登録', reason: '需要注册信用卡才能续期' },
   { pattern: '決済方法', reason: '需要设置支付方式才能续期' },
@@ -47,14 +47,14 @@ export const KNOWN_FAILURE_REASONS = [
  *   利用期限の12時間前から更新手続きが可能です。
  *   利用を継続される場合は、2026年7月24日12：00以降にお試しください。
  */
-export const RENEWAL_WINDOW_BLOCKED_PATTERNS = [
+const RENEWAL_WINDOW_BLOCKED_PATTERNS = [
   '以降にお試し',
   '以降に再度',
   '以降にお申し込み',
 ];
 
 /** 辅助确认：与「请之后再试」同时出现时增强可信度 */
-export const RENEWAL_WINDOW_CONTEXT_PATTERNS = [
+const RENEWAL_WINDOW_CONTEXT_PATTERNS = [
   '12時間前',
   '更新手続き',
   '契約更新',

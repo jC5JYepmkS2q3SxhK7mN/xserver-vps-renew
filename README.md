@@ -80,6 +80,10 @@ export CAPSOLVER_API_KEY="你的CapSolver密钥"
 
 # 运行脚本
 node xserver-vps-renew.mjs
+
+# 查看版本 / 帮助（无需配置环境变量即可使用）
+node xserver-vps-renew.mjs --version
+node xserver-vps-renew.mjs --help
 ```
 
 ## 📊 工作流程

@@ -6,16 +6,16 @@
 import { fetchWithTimeout, NOOP_LOGGER } from './utils.mjs';
 
 /** 验证码标准长度 */
-export const CAPTCHA_LENGTH = 6;
+const CAPTCHA_LENGTH = 6;
 
 /** Keras API 请求超时（毫秒） */
-export const CAPTCHA_API_TIMEOUT_MS = 30_000;
+const CAPTCHA_API_TIMEOUT_MS = 30_000;
 
 /** 预编译的验证码格式正则（避免运行时重复编译） */
-export const CAPTCHA_PATTERN = new RegExp(`^\\d{${CAPTCHA_LENGTH}}$`);
+const CAPTCHA_PATTERN = new RegExp(`^\\d{${CAPTCHA_LENGTH}}$`);
 
 /** 平假名到数字的映射表（支持 OCR 错误时的备选匹配） */
-export const HIRAGANA_NUMBER_MAP = {
+const HIRAGANA_NUMBER_MAP = {
   // 完整平假名
   'ぜろ': '0', 'れい': '0',
   'いち': '1',

@@ -67,11 +67,13 @@ import {
   shouldLog,
   formatLogLine,
   formatLogTimestamp,
+  clampLogMessage,
   analyzeFingerprintHealth,
   findChromePath,
   cleanChromeLocks,
   formatTokyoDateTime,
   PROJECT_SOURCE_LINE,
+  PROJECT_REPO_URL,
   DEFAULT_LOG_LEVEL,
   LOG_LEVEL_DEBUG,
   LOG_LEVEL_INFO,
@@ -234,7 +236,8 @@ const ts = () => formatLogTimestamp();
 function emitLog(level, msg) {
   if (!shouldLog(CONFIG.LOG_LEVEL, level)) return;
   // 单次取时间戳：避免跨秒时同条日志出现两个不一致的时间（原实现最多调用 3 次 ts()）
-  const line = formatLogLine(ts(), level, msg);
+  // 超长消息（错误堆栈/诊断片段）截断，防 docker logs 刷屏
+  const line = formatLogLine(ts(), level, clampLogMessage(msg));
   if (level === LOG_LEVEL_ERROR) {
     console.error(line);
     return;
@@ -336,6 +339,8 @@ async function main() {
   const startedAtMs = Date.now();
   log(`========== Xserver VPS 自动续期 v${PROJECT_VERSION} ==========`);
   log(`🔗 ${PROJECT_SOURCE_LINE}`);
+  // 文档入口：排障 / 配置疑问的第一站（README 与 RUNBOOK 随仓库分发）
+  log(`📖 文档: README.md（配置与入门） / RUNBOOK.md（排障手册）`);
   log(
     `日志级别: ${CONFIG.LOG_LEVEL}`
     + ` | 时区: ${process.env.TZ || 'Asia/Tokyo'}`
@@ -401,6 +406,8 @@ async function main() {
   let browser = null;
   // 执行过程摘要（try 内外共享，失败通知也能附带已完成步骤）
   const processSteps = [];
+  // 步骤序号：日志行带 [步骤N] 前缀，与通知过程步骤（1. 2. 3.）一一对应，便于 docker logs 对账
+  let stepCount = 0;
   // 分阶段计时：日志里每步附带「距上一步/启动」耗时，便于 docker logs 定位慢环节；
   // 通知中的步骤文本保持纯净，不受耗时影响
   let lastStepAtMs = startedAtMs;
@@ -408,8 +415,9 @@ async function main() {
     const now = Date.now();
     const stepMs = now - lastStepAtMs;
     lastStepAtMs = now;
+    stepCount += 1;
     processSteps.push(step);
-    log(`${step}（耗时 ${formatDurationMs(stepMs)}）`);
+    log(`[步骤${stepCount}] ${step}（耗时 ${formatDurationMs(stepMs)}）`);
   };
   /** 本轮已知的 VPS 上下文（失败通知复用） */
   let knownVps = {
@@ -554,6 +562,31 @@ async function main() {
     await page.setUserAgent(DEFAULT_UA);
     logDebug(`浏览器 UA: ${DEFAULT_UA.substring(0, 60)}...`);
     page.setDefaultTimeout(CONFIG.NAVIGATION_TIMEOUT);
+
+    // debug 级别监听浏览器 console / 页面 JS 异常 / 失败请求：
+    // Cloudflare 或页面脚本报错在排障时由此可见；每类设条数上限防极端页面刷屏
+    if (CONFIG.LOG_LEVEL === LOG_LEVEL_DEBUG) {
+      const consoleCap = { count: 0, max: 50 };
+      page.on('console', (msg) => {
+        if (consoleCap.count >= consoleCap.max) return;
+        consoleCap.count++;
+        const text = String(msg.text?.() || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+        if (text) logDebug(`[页面console:${msg.type()}] ${text}`);
+      });
+      const pageErrorCap = { count: 0, max: 30 };
+      page.on('pageerror', (err) => {
+        if (pageErrorCap.count >= pageErrorCap.max) return;
+        pageErrorCap.count++;
+        logDebug(`[页面JS异常] ${String(err?.message || err).slice(0, 300)}`);
+      });
+      const reqFailCap = { count: 0, max: 50 };
+      page.on('requestfailed', (req) => {
+        if (reqFailCap.count >= reqFailCap.max) return;
+        reqFailCap.count++;
+        const failure = req.failure?.();
+        logDebug(`[请求失败] ${failure?.errorText || '未知原因'}: ${req.url().slice(0, 200)}`);
+      });
+    }
 
     // Standalone Turnstile：正常渲染 + API 求解（不拦截 render）
     logDebug('Turnstile 策略：正常渲染 + API 求解（不拦截 render）');
@@ -702,14 +735,6 @@ async function main() {
     const nextRunStr = resolveNextRun();
     const executedAt = formatTokyoDateTime();
 
-    // 持久化前先读取历史记录数：非持久化部署（容器每轮重建、状态文件随容器丢失）
-    // 无历史累计，通知应展示「本轮续期成功」而非恒为 1 的「已连续成功 N 次」
-    const { totalRuns: priorTotalRuns } = getRenewalStatus(
-      RENEWAL_STATUS_FILE,
-      ALERT_AFTER_CONSECUTIVE_FAILURES,
-      LOGGER,
-    );
-
     // 持久化续期成功记录（使用配置的状态文件路径）
     persistRenewalRecord(buildRenewalRecord({
       success: true,
@@ -719,12 +744,17 @@ async function main() {
       newExpireDate,
     }));
 
-    // 含本轮在内的连续成功次数（持久化后读取，供通知展示「稳定运行」信号）
-    const { consecutiveSuccesses } = getRenewalStatus(
+    // 持久化后仅读取一次，同时取两个信号：
+    // - consecutiveSuccesses：含本轮在内的连续成功次数（通知展示「稳定运行」信号）
+    // - hasHistory：持久化前总数为 N，写入后为 N+1，故「totalRuns > 1」等价于存在历史累计；
+    //   非持久化部署（容器每轮重建、状态文件随容器丢失）首轮 totalRuns=1，
+    //   通知应展示「本轮续期成功」而非恒为 1 的「已连续成功 N 次」
+    const { consecutiveSuccesses, totalRuns: postTotalRuns } = getRenewalStatus(
       RENEWAL_STATUS_FILE,
       ALERT_AFTER_CONSECUTIVE_FAILURES,
       LOGGER,
     );
+    const hasHistory = postTotalRuns > 1;
 
     await notify(buildSuccessNotifyMessage({
       serverName: renewalData.vpsInfo.serverName,
@@ -740,7 +770,7 @@ async function main() {
       durationMs: elapsedMs(),
       remainingHours: renewalData.remainingHours,
       consecutiveSuccesses,
-      hasHistory: priorTotalRuns > 0,
+      hasHistory,
     }), { kind: 'success' });
     // 安全关闭：close 抛错不误入 catch（续期已成功且记录已持久化，误报失败会引发恐慌）
     await safeClosePage(page, LOGGER);
@@ -793,6 +823,9 @@ async function main() {
         ? e.attempts.map((a) => a.provider).filter(Boolean)
         : []);
 
+    // 图形验证码实际已尝试次数（handleCaptchaPage 最后一次重试抛错时附带）
+    const captchaRetries = Number.isInteger(e?.captchaAttempts) ? e.captchaAttempts : 0;
+
     // 需人工确认：发送专门提醒（登录检查新确认页，手动处理后重跑容器），区别于通用失败通知
     if (needsManualConfirmation) {
       await notify(buildManualConfirmNotifyMessage({
@@ -821,6 +854,7 @@ async function main() {
         durationMs: elapsedMs(),
         failureCategory: failureMeta.category,
         nextRunAt: resolveNextRun(),
+        captchaRetries,
       }), { kind: 'failure' });
     }
     process.exitCode = 1;
@@ -844,8 +878,41 @@ async function main() {
   }
 }
 
+// ============================================================
+// CLI 入口
+// ============================================================
+
+/** --help / --version 用法文本（不依赖 main()，可在未配置环境时查看） */
+const USAGE_TEXT = `Xserver VPS 自动续期 v${PROJECT_VERSION}
+
+用法: node xserver-vps-renew.mjs [选项]
+
+选项:
+  -v, --version  显示版本号
+  -h, --help     显示本帮助
+
+关键环境变量（完整清单见 .env.example / README.md）:
+  XSERVER_MEMBER_ID    会员 ID（必填）
+  XSERVER_PASSWORD     登录密码（必填）
+  CAPSOLVER_API_KEY    Turnstile 打码平台主密钥（推荐）
+  TG_BOT_TOKEN         Telegram Bot Token（可选）
+  TG_CHAT_ID           Telegram Chat ID（可选）
+  LOG_LEVEL            debug / info / warn / error（默认 info）
+
+文档: README.md（配置与入门） / RUNBOOK.md（排障手册）
+源项目: ${PROJECT_REPO_URL}`;
+
 // 仅在直接执行时运行 main()
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const cliArgs = process.argv.slice(2);
+  if (cliArgs.includes('--version') || cliArgs.includes('-v')) {
+    console.log(PROJECT_VERSION);
+    process.exit(0);
+  }
+  if (cliArgs.includes('--help') || cliArgs.includes('-h')) {
+    console.log(USAGE_TEXT);
+    process.exit(0);
+  }
   main().catch((e) => {
     // 兜底路径也走统一日志格式（时间戳 + [ERROR] 标签），与 emitLog 输出一致
     err(`未捕获异常: ${e.message}`);

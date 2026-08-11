@@ -6,6 +6,7 @@
 
 | 日期 | 变更内容 |
 |------|----------|
+| 2026-08-11 | 任务 37 十轮迭代：成功路径状态文件读取合并（3 次→2 次 I/O，`priorTotalRuns` 由 `totalRuns>1` 推导）；debug 级浏览器 console/pageerror/requestfailed 监听（条数上限防刷屏）；失败通知附验证码重试次数 `captchaRetries`（`error.captchaAttempts`，+2 用例）；日志超长截断 `clampLogMessage`（+3 用例）与 `[步骤N]` 序号；用户脚本 Turnstile token 监听改轮询主路径（原 MutationObserver 仅观察 attribute 恒等超时）；用户脚本状态面板标题/关闭按钮/success 3s 自动收起；22 个多余导出收敛 + `pollTurnstileTaskResult` 拆分 + theme/action 精简；CLI `--version/--help` + 启动横幅文档入口；人工确认通知「下次执行」→「下次检查」（23 文件 / 439 用例） |
 | 2026-08-08 | 任务 36 十轮迭代：Turnstile 截图按 debug 按需写入（`SAVE_TURNSTILE_SCREENSHOTS`）；`page.close` 异常防御 `safeClosePage` 防双通知；自然通过降级立即点击；VPS 行解析纯函数 `extractVpsInfoFromCellTexts`；skip 日志去重；人工确认通知补本地 Node 重跑命令；用户脚本 Turnstile 超时不再强制提交；诊断脚本代理地址脱敏；新到期日提取收敛 `extractNewExpireDate`；entrypoint/cron-run/diagnostics 时间戳显式 `TZ`（23 文件 / 430 用例） |
 | 2026-08-07 | 迭代打磨：分阶段耗时日志（pushStep 每步耗时）；`waitForSubmissionResult` 提交后轮询成功信号替代固定 2s（+4 用例）；Turnstile 注入后 token 软等待；通知/日志时间格式统一（`formatTokyoDateTime` 委托 `formatLogTimestamp`）；失败通知补「下次检查」行；Turnstile 轮询 debug 日志降噪（每 5 轮）；启动日志打印上次运行结果摘要；用户脚本 UI 无障碍（reduced-motion/aria-live/滚动）；`diagnostics.sh` 新增 Keras + 打码平台 API 连通性探测（22 文件 / 410 用例） |
 | 2026-08-07 | 打磨：日志增加 [DEBUG]/[INFO]/[WARN]/[ERROR] 级别标签（formatLogLine）；关键告警提级 warn（failover 失败/熔断）；时间戳单源化 formatLogTimestamp + renewal-status 接入 logger；通知「下次执行」→「下次检查」+ 成功通知「连续成功 N 次」（countConsecutiveSuccesses）；Telegram 响应体 ok:false 校验（parseTelegramSendResult）；Turnstile/验证码图等待改软等待 waitForSelectorSoft；指纹体检 analyzeFingerprintHealth；用户脚本状态面板状态色/动画（21 文件 / 403 用例） |

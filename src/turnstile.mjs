@@ -189,7 +189,7 @@ export function resolveAntiCaptchaProxyMode(config) {
  * @param {object} config
  * @returns {object|null}
  */
-export function buildProviderByName(name, config) {
+function buildProviderByName(name, config) {
   if (!config || typeof config !== 'object') return null;
   const hasProxy = !!(config.PROXY_TYPE && config.PROXY_ADDRESS && config.PROXY_PORT);
 
@@ -283,8 +283,8 @@ export function getTurnstileProvider(config) {
  * 仅读其一会在某些页面漏取，导致 Anti-Captcha 任务的 cData/chlPageData 恒为空。
  * 浏览器端 page.evaluate 通过参数透传复用本常量，避免两处手工同步。
  */
-export const TURNSTILE_C_DATA_ATTRS = ['data-c-data', 'data-cdata'];
-export const TURNSTILE_CHL_PAGE_DATA_ATTRS = ['data-chl-page-data', 'data-chlpagedata'];
+const TURNSTILE_C_DATA_ATTRS = ['data-c-data', 'data-cdata'];
+const TURNSTILE_CHL_PAGE_DATA_ATTRS = ['data-chl-page-data', 'data-chlpagedata'];
 
 /**
  * 从 Turnstile widget DOM 元素读取参数（纯函数，浏览器/Node 双端可用）
@@ -575,10 +575,24 @@ export async function solveTurnstileViaAPI(
 
   logger.info(`${provider.name} 任务已创建: taskId=${taskId}`);
 
+  const { token, userAgent } = await pollTurnstileTaskResult(provider, taskId, logger, timeout);
+  return { token, userAgent, providerName: provider.name };
+}
+
+/**
+ * 轮询 getTaskResult 直到任务完成（solveTurnstileViaAPI 的轮询段，独立成函数降低单函数复杂度）
+ * 成功时输出成功日志（含耗时与 token 长度）；瞬态异常/进度日志降噪：
+ * debug 模式下每 3s 一条会刷屏（120s 超时 ≈40 行），进度每 5 轮输出一次；
+ * 异常信号保留首次与每 5 次，便于观测又不淹没关键日志
+ * @param {object} provider - 提供商配置（name/apiBase/clientKey）
+ * @param {number} taskId - createTask 返回的任务 ID
+ * @param {Function} logger - 日志函数
+ * @param {number} timeout - 轮询超时（毫秒）
+ * @returns {Promise<{ token: string, userAgent: string|null }>}
+ */
+async function pollTurnstileTaskResult(provider, taskId, logger, timeout) {
   const startTime = Date.now();
   const maxPolls = Math.max(1, Math.ceil(timeout / POLL_INTERVAL_MS));
-  // 瞬态异常/进度日志降噪：debug 模式下每 3s 一条会刷屏（120s 超时 ≈40 行），
-  // 进度每 5 轮输出一次；异常信号保留首次与每 5 次，便于观测又不淹没关键日志
   let transientLogCount = 0;
 
   for (let i = 1; i <= maxPolls; i++) {
@@ -634,7 +648,7 @@ export async function solveTurnstileViaAPI(
       const userAgent = resultData.solution.userAgent || null;
       logger.info(`${provider.name} 求解成功！耗时 ${Date.now() - startTime}ms，token 长度: ${token.length}` +
         (userAgent ? `，UA: ${userAgent.substring(0, 50)}...` : ''));
-      return { token, userAgent, providerName: provider.name };
+      return { token, userAgent };
     }
 
     // 进度日志每 5 轮输出一次（debug 降噪）；最后一轮也输出便于核对轮数

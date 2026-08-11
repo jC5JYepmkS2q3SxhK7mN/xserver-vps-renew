@@ -29,7 +29,7 @@ import { isTurnstileOutageError } from './turnstile.mjs';
 import { recognizeCaptcha } from './captcha.mjs';
 
 /** 构造「需要人工确认」错误：自动同意处理无效，需用户登录手动确认后重跑容器 */
-export function manualConfirmError(message) {
+function manualConfirmError(message) {
   const error = new Error(message);
   error.code = 'MANUAL_CONFIRMATION_REQUIRED';
   return error;
@@ -290,7 +290,7 @@ export async function checkRenewalNeeded(page, { config, logger = NOOP_LOGGER } 
  * @param {object} [logger=NOOP_LOGGER] - 分级日志对象
  * @returns {Promise<null | { status: 'window_blocked', reason: string, retryAfter: string|null }>}
  */
-export async function detectBlockedPage(page, logger = NOOP_LOGGER) {
+async function detectBlockedPage(page, logger = NOOP_LOGGER) {
   const pageText = await getBodyText(page);
   const detection = detectRenewalWindowBlocked(pageText, page.url());
   if (!detection.blocked) return null;
@@ -358,7 +358,7 @@ export async function handleRenewalConfirm(page, renewUrl, { config, logger = NO
  * @param {string|null|undefined} renewUrl
  * @param {{ config?: object, logger?: object }} [ctx]
  */
-export async function navigateForCaptchaRetry(page, currentUrl, renewUrl, { config, logger = NOOP_LOGGER } = {}) {
+async function navigateForCaptchaRetry(page, currentUrl, renewUrl, { config, logger = NOOP_LOGGER } = {}) {
   const nav = resolveCaptchaRetryNavigation(currentUrl, { renewUrl });
 
   if (nav.mode === 'renew_index') {
@@ -542,7 +542,11 @@ export async function handleCaptchaPage(page, options = {}, { config, logger = N
           throw error; // 无法刷新，抛出原始错误
         }
       } else {
-        // 最后一次重试仍失败
+        // 最后一次重试仍失败：附带已尝试次数，供失败通知展示「重试上下文」
+        // （Turnstile failover 的 attempts 是数组，不能混用，故用独立字段）
+        if (error && typeof error === 'object') {
+          error.captchaAttempts = attempt;
+        }
         logger.info(`❌ 验证码识别/提交失败，已尝试 ${maxRetries} 次`);
         throw error;
       }

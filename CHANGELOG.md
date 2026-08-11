@@ -2,7 +2,19 @@
 
 ## [Unreleased]
 
-### 打磨（2026-08-08 · 任务 36 十轮迭代）
+### 迭代（2026-08-11）
+- **性能：成功路径状态文件读取合并**：main 成功路径 `getRenewalStatus` 由 2 次外部读取合并为 1 次——`priorTotalRuns` 用持久化后 `totalRuns > 1` 等价推导（persist 前 N 条 → 后 N+1 条），`hasHistory` 语义不变，每轮减少 1 次文件 I/O
+- **排障：浏览器 console / 页面 JS 异常 / 失败请求监听**：`LOG_LEVEL=debug` 时主脚本监听 `page.on('console'|'pageerror'|'requestfailed')` 并带 `[页面console:级别]` / `[页面JS异常]` / `[请求失败]` 前缀输出；每类设条数上限（50/30/50）防极端页面刷屏——Cloudflare 或页面脚本报错在排障时由此可见
+- **通知：失败通知附验证码重试上下文**：`handleCaptchaPage` 最后一次重试抛错时附带 `error.captchaAttempts`（独立字段，不与 Turnstile failover 的 attempts 数组混用），`buildFailureNotifyMessage` 新增 `captchaRetries` 参数，>1 时展示「🔄 验证码识别已重试 N 次（上限 M）」（full/compact 均生效；≤1 不展示避免噪音；新增 2 用例）
+- **日志：超长消息截断 + 步骤序号**：新增 `utils.clampLogMessage`（默认 3000 字符，保留截断标记），`emitLog` 对超长错误堆栈/诊断片段截断防刷屏（新增 3 用例）；`pushStep` 日志行带 `[步骤N]` 序号，与通知过程步骤（1. 2. 3.）一一对应，便于 `docker logs` 对账
+- **用户脚本修复：Turnstile token 监听失效**：`xserver-renews.js` 原 `MutationObserver` 仅观察 `value` attribute，而 Turnstile 内部以 property 赋值写入 `input.value`，observer 大概率永不触发导致恒等 15s 超时；改为 500ms 轮询为主 + attribute 观察兜底；并显式处理 `cf-turnstile-response` 输入框缺失（提示手动完成而非 TypeError）
+- **用户脚本 UI/UX**：状态面板新增标题行（🔄 Xserver VPS 自动续期）+ 手动关闭按钮（✕）；success 状态 3s 自动收起（每次更新重置定时器，防残留遮挡）；「无需续期」分支冗余的手动 3s 移除已删除
+- **代码质量：多余导出收敛**：22 个仅模块内部使用的符号去掉 `export`（`CAPTCHA_LENGTH` / `FAILURE_PATTERNS` / `TURNSTILE_C_DATA_ATTRS` / `LOG_LEVEL_TAG` / `manualConfirmError` 等），缩小 API 面；`solveTurnstileViaAPI` 轮询段独立为 `pollTurnstileTaskResult`（单函数 130 → 70 行）；`waitForTurnstile` 精简未使用的 theme/action 字段读取
+- **友好度：CLI `--version` / `--help`**：主脚本支持 `-v/--version`（打印版本）与 `-h/--help`（用法 + 关键环境变量 + 文档入口），未配置环境时即可查看；启动横幅新增「📖 文档: README.md / RUNBOOK.md」入口行
+- **文案一致性**：人工确认通知「下次执行」统一为「下次检查」（与成功/失败/跳过通知一致，语义更准确；新增断言）
+- 验证：`node --check` 全仓 + 23 文件 / 439 用例全绿（净增 5 用例），覆盖率门禁达标；浏览器流程模块沿用既有「依赖真实页面无单测」政策
+
+### 迭代（2026-08-08）
 - **截图按需写入**：`turnstile-flow` 求解前后截图仅在 `LOG_LEVEL=debug` 时落盘（新增 `SAVE_TURNSTILE_SCREENSHOTS=true` 可强制开启），避免默认级别下每轮运行向 `/tmp` 累积无用截图（新增 3 用例）
 - **`page.close` 异常防御**：新增 `page-utils.safeClosePage`，skip/success 路径 close 抛错仅记 warn 不中断——防止「已跳过/已成功 + 失败」双通知误报（close 失败由 finally 中 `browser.close` 兜底回收；新增 4 用例）
 - **自然通过降级立即点击**：`waitForTurnstileToken` 首次点击立即触发（原前 10 秒纯轮询空等），后续仍按 10 秒间隔重试；`clickFn` 可注入便于单测（新增 3 用例）
@@ -15,7 +27,7 @@
 - **时间戳时区显式化**：`entrypoint.sh` / `cron-run.sh` / `diagnostics.sh` 的时间戳统一经 `ts()`（`TZ` 缺省 `Asia/Tokyo`），与主脚本 `formatLogTimestamp` 时区一致，本地/未设 TZ 容器不再出现时区漂移
 - 验证：`node --check` + 23 文件 / 430 用例全绿（净增 20 用例），覆盖率门禁达标；浏览器流程模块沿用既有「依赖真实页面无单测」政策
 
-### 打磨（2026-08-07 · 迭代打磨）
+### 迭代（2026-08-07）
 - **分阶段耗时日志**：主脚本 `pushStep` 每步日志附带耗时（距上一步/启动），`docker logs` 可直接定位慢环节（Chrome 启动 / 登录 / 验证码 / Turnstile）；通知中的执行步骤文本保持纯净不受影响
 - **提交后结果软等待**：`panel-flow` 新增 `waitForSubmissionResult`——提交后轮询页面直到命中明确「成功」信号即提前返回（正常路径提速），未命中则等待至 2s 上限（与原固定等待行为下限一致），避免成功页渲染完成前过早读到中间态而误判失败（新增 4 用例）
 - **Turnstile token 软等待**：`turnstile-flow` 注入 token 后固定 `sleep(2s)` 改为轮询 `cf-turnstile-response` 至 2s 上限——token 就绪立即继续，最坏路径不变
@@ -27,7 +39,7 @@
 - **容器诊断增强**（`diagnostics.sh`）：新增「关键 API 连通性」探测——Keras 验证码识别端点与已配置的 Turnstile 打码平台 API 基址（冷启动超时/平台不可达为续期失败高频根因；GET 405 视为可达，仅验证连通）
 - 验证：`node --check` + 22 文件 / 410 用例全绿（新增 7 用例），覆盖率门禁达标；浏览器流程模块（panel-flow / turnstile-flow）沿用既有「依赖真实页面无单测」政策
 
-### 打磨（2026-08-07）
+### 迭代（2026-08-07）
 - **日志可观测性**：`emitLog` 输出增加 `[DEBUG]/[INFO]/[WARN]/[ERROR]` 级别标签，`docker logs` 可按级别过滤/采集；新增纯函数 `formatLogLine`（utils）锁定「时间戳 + 级别 + 消息」格式（error 自动补 ❌，消息已带不重复）；主脚本底部兜底「未捕获异常」也走统一日志格式（原裸 `console.error` 无时间戳）
 - **日志级别语义修正**：关键路径告警从 info 提级 warn——主脚本「未配置任何 Turnstile 打码平台」、failover「✖ 第 N 次失败」「⚡ 已熔断切换」（`LOG_LEVEL=warn` 下仍可见，避免静默熔断）；failover 测试 logger mock 补齐 `warn/error` 并对齐 `NOOP_LOGGER` 契约，新增 warn 断言
 - **时间戳单源化**：新增 `formatLogTimestamp`（utils，locale 无关固定宽度 `YYYY-MM-DD HH:mm:ss`、`hourCycle: h23` 防午夜 24 点制），主脚本 `ts()` 委托之；`renewal-status.mjs` 读写/状态查询接入可选 logger 参数（默认控制台兜底），主脚本注入 `LOGGER` 后状态读写日志同样带时间戳与级别标签；启动摘要日志新增「时区」字段（兼作 env-whitelist 防漂移守卫的 `TZ` 读取点）
@@ -38,7 +50,7 @@
 - **用户脚本 UI**（`xserver-renews.js`）：状态面板升级为状态色方案（成功绿/错误红/警告琥珀/信息蓝），圆角/内边距/阴影/最大宽度/换行优化，新增淡入动画；错误/警告/成功路径的 9 处提示点按语义着色
 - 验证：`node --check` + 21 文件 / 403 用例全绿（新增 27 用例），覆盖率门禁达标（branches 63.9% / lines 57.1%，阈值 25% / 28%）；浏览器流程模块（panel-flow / turnstile-flow）沿用既有「依赖真实页面无单测」政策
 
-### 打磨（2026-08-06）
+### 迭代（2026-08-06）
 - **cron 环境变量白名单防漂移测试**：新增 `env-whitelist.test.mjs`（4 用例）校验三处清单同步——主脚本 `CONFIG` 读取项 ⊆ `entrypoint.sh` cron-run.sh 白名单（防定时模式配置静默丢失）、白名单 ⊆ `.env.example`（防漏文档）、白名单无重复、`.env.example` 可配置项均被主脚本或 entrypoint 读取；`CRON_SCHEDULE`（#7 有意不导出）与 `CRON_SCHEDULE_DISPLAY` / `ENABLE_DIAGNOSTICS`（内部透传）列为预期例外
 - 验证：`node --check` + 21 文件 / 376 用例全绿
 
@@ -52,7 +64,7 @@
 - **清理**：`isRenewalDue` 移除未使用参数 `tomorrow`（僵尸签名）；`formatTokyoDateTime` 尊重 `TZ` 环境变量（与日志时区契约一致）；`buildRenewUrl` 标注 URL 子串替换脆弱点
 - 验证：`node --check` + 20 文件 / 372 用例全绿，覆盖率门禁达标（branches 62.2% / lines 55.0%，阈值 25% / 28%）；浏览器流程模块沿用既有"依赖真实页面无单测"政策并已在 CLAUDE.md 记录
 
-### 打磨（2026-08-06）
+### 迭代（2026-08-06）
 - **Turnstile widget 参数属性名双名兼容**：`extractTurnstileParams` 现同时读取 `data-c-data`/`data-chl-page-data`（官方注入写法）与 `data-cdata`/`data-chlpagedata`（社区常用写法），抽出纯函数 `readTurnstileWidgetParams`，避免 Anti-Captcha 任务的 `cData`/`chlPageData` 在部分页面漏取（新增 4 用例）
 - **去重**：`handleCaptchaPage` 复用 `getTurnstileToken` 检查预填 token，消除重复遍历；抽取 `getBodyText` 统一 4 处页面正文读取；抽取 `listFailedTurnstileProviders` 统一「熔断平台提取」（主脚本过程摘要与 `formatTurnstileNotifyLine` 共用）；失败分类标签表单一来源 `FAILURE_CATEGORY_LABELS`；`recognizeCaptcha` 去除与下层的重复开始/成功日志
 - **一致性**：`checkRenewalNeeded` 剩余小时与到期判定统一 `nowMs` 时间基准，避免跨秒边界判定不一致

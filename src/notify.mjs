@@ -76,7 +76,7 @@ export const TG_ERROR_MESSAGE_MAX_LEN = 500;
 export const TG_PROCESS_STEP_MAX_COUNT = 15;
 
 /** 单条过程步骤最大字符数 */
-export const TG_PROCESS_STEP_MAX_LEN = 180;
+const TG_PROCESS_STEP_MAX_LEN = 180;
 
 /**
  * 解析 TG_NOTIFY_DETAIL 环境变量
@@ -253,7 +253,7 @@ export function formatProcessSteps(processSteps, detail = TG_NOTIFY_DETAIL_FULL)
  * @param {string|null|undefined} [durationText] - 若已格式化则优先使用
  * @returns {string} 空字符串或一行（无尾换行）
  */
-export function formatDurationNotifyLine(durationMs, durationText = null) {
+function formatDurationNotifyLine(durationMs, durationText = null) {
   const text = durationText != null && String(durationText).trim() !== ''
     ? String(durationText).trim()
     : (durationMs != null ? formatDurationMs(durationMs) : '');
@@ -532,7 +532,7 @@ export function buildManualConfirmNotifyMessage({
   }
   lines.push('', `⏰ 执行时间: ${executedAt || '—'}`);
   if (nextRunAt) {
-    lines.push(`⏭️ 下次执行: ${nextRunAt}`);
+    lines.push(`⏭️ 下次检查: ${nextRunAt}`);
   }
   // 尾部统一标注源项目，告知使用者第一来源（防冒充/转售）
   lines.push('', PROJECT_SOURCE_LINE);
@@ -599,7 +599,7 @@ export const FAILURE_CATEGORY = {
 };
 
 /** 分类 → 中文标签（classifyRenewalFailure 与 buildFailureNotifyMessage 共用，唯一来源） */
-export const FAILURE_CATEGORY_LABELS = {
+const FAILURE_CATEGORY_LABELS = {
   [FAILURE_CATEGORY.TURNSTILE_OUTAGE]: 'Turnstile 全平台熔断',
   [FAILURE_CATEGORY.TURNSTILE]: 'Turnstile 求解',
   [FAILURE_CATEGORY.CAPTCHA]: '图形验证码',
@@ -796,6 +796,7 @@ export function buildFailureHints({
  * @param {string|null} [params.durationText]
  * @param {string} [params.failureCategory] - 预分类；缺省时自动 classify
  * @param {string} [params.nextRunAt] - 下次自动检查时间（通知失败后告知重试预期）
+ * @param {number} [params.captchaRetries=0] - 图形验证码实际已尝试次数（最后一次重试后抛错时附带）
  * @returns {string}
  */
 export function buildFailureNotifyMessage({
@@ -820,6 +821,7 @@ export function buildFailureNotifyMessage({
   durationText = null,
   failureCategory = null,
   nextRunAt = null,
+  captchaRetries = 0,
 }) {
   const mode = parseNotifyDetail(detail);
   const multiProviderOutage = isTurnstileAllProvidersFailed({
@@ -862,6 +864,11 @@ export function buildFailureNotifyMessage({
   const durationLine = formatDurationNotifyLine(durationMs, durationText);
   // 失败后告知下次自动检查时间，避免用户误以为需一直手动盯守
   const nextRunLine = nextRunAt ? `⏭️ 下次检查: ${escapeHtml(nextRunAt)}` : '';
+  // 图形验证码实际重试次数（仅当 >0 时展示；≤1 表示首轮即败，无重试可提）
+  const retries = Number(captchaRetries);
+  const captchaRetryLine = Number.isInteger(retries) && retries > 1
+    ? `🔄 验证码识别已重试 ${retries} 次（上限 ${captchaMaxRetry}）\n`
+    : '';
   const remainingLine = remainingHours != null && Number.isFinite(Number(remainingHours))
     ? `⏳ 剩余时间: ${escapeHtml(formatRemainingHours(remainingHours))}`
     : '';
@@ -879,6 +886,7 @@ export function buildFailureNotifyMessage({
     `⏰ 执行时间: ${escapeHtml(executedAt || formatTokyoDateTime())}\n` +
     `🏷️ 失败类型: ${escapeHtml(failureMeta.label)}\n` +
     `${contextLines.length ? `${contextLines.join('\n')}\n` : ''}` +
+    `${captchaRetryLine}` +
     `💥 错误信息: <code>${safeError}</code>\n` +
     `${turnstileFailLine ? `${turnstileFailLine}\n` : ''}` +
     `${durationLine ? `${durationLine}\n` : ''}` +

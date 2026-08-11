@@ -120,7 +120,7 @@ const LOG_LEVEL_RANK = {
 };
 
 /** 日志级别标签（输出行中插入，便于 docker logs 按级别过滤/告警采集） */
-export const LOG_LEVEL_TAG = {
+const LOG_LEVEL_TAG = {
   [LOG_LEVEL_DEBUG]: '[DEBUG]',
   [LOG_LEVEL_INFO]: '[INFO]',
   [LOG_LEVEL_WARN]: '[WARN]',
@@ -143,6 +143,22 @@ export function formatLogLine(stamp, level, msg) {
     return `${base} ❌ ${text}`;
   }
   return `${base} ${text}`;
+}
+
+/**
+ * 截断超长日志消息（防 docker logs 刷屏；保留截断标记）
+ * 错误堆栈/诊断片段可能数千字符，正常日志不受影响
+ * @param {unknown} msg
+ * @param {number} [maxLen=3000] - 截断上限（字符）
+ * @returns {string}
+ */
+export function clampLogMessage(msg, maxLen = 3000) {
+  const s = String(msg ?? '');
+  const limit = Math.max(128, Number(maxLen) || 3000);
+  if (s.length <= limit) return s;
+  const marker = `…(日志过长已截断,共${s.length}字符)`;
+  const bodyLen = Math.max(32, limit - marker.length);
+  return `${s.slice(0, bodyLen)}${marker}`;
 }
 
 /**
