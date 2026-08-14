@@ -6,7 +6,8 @@
 - **安全：修复 Dependabot alert GHSA-jmr9-qjv8-65gv（high）**：`extract-zip <= 2.0.1` 符号链接路径遍历（CVE-2026-56876）影响全部已发布版本、上游暂无修复版；经 `overrides` 将传递依赖 `@puppeteer/browsers` 由 `2.10.3` 强制升至 `3.2.0`（改用 `modern-tar` 解压，彻底移除 `extract-zip` 依赖链）。已核对 `rebrowser-puppeteer-core` 所需的 14 个导出符号（`launch`/`computeExecutablePath`/`resolveBuildId`/`createProfile`/`TimeoutError` 等）在 3.x 全部保留；`Browser` enum 与 2.x 一致
 - **安全：nanoid 漏洞顺带修复**：`npm audit` 检出 dev 链 `vitest → vite → postcss → nanoid@3.3.16` 的 GHSA-2v37-7h3g-55p8（high，size=0 时自定义生成器死循环），`overrides` 强制 `nanoid@3.3.18`（同 major 修复版）
 - **运行时要求：Node >= 22.12.0**：`package.json` engines 由 `>=18.0.0` 上调（`@puppeteer/browsers@3.2.0` 要求），Docker 基础镜像 `node:22-slim` 与 CI `node-version: 22` 均满足，无需改动
-- 验证：`node --check` 全仓 + 23 文件 / 439 用例全绿；`npm audit --registry=https://registry.npmjs.org` 报 0 vulnerabilities；`npm ls extract-zip` 确认依赖链已移除；Docker 内 `npm ci --omit=dev` 生产依赖同步受益
+- **CI 修复：Trivy 镜像扫描门禁（HIGH）**：推送后 `docker-publish.yml` 的 Trivy 扫描失败——① 镜像内 xorg（`xserver-common`/`xvfb`）为 `2:21.1.7-3+deb12u12`，7 个 CVE（CVE-2026-50256/50257/50258/50259/50260/50261/50264）修复版本为 `deb12u13`，因 apt 层命中构建缓存未升级，Dockerfile 新增 `apt-get install -y --only-upgrade xvfb xserver-common` 显式升级并使缓存失效；② `supercronic` v0.2.36 官方 release 用 Go 1.24.6 构建，内嵌 stdlib 报 CVE-2026-39821/46600（修复需 Go ≥1.26.6），而最新 v0.2.48 仍用 Go 1.26.5（低于修复版本），改为 Docker 多阶段构建：`golang:1.26`（Go 1.26.6+）从同 tag 源码重建，ldflags 注入与官方 Makefile 一致（`-X main.Version`）；`-test` 行为与官方 release 一致（CI smoke test 兼容）
+- 验证：`node --check` 全仓 + 23 文件 / 439 用例全绿；`npm audit --registry=https://registry.npmjs.org` 报 0 vulnerabilities；`npm ls extract-zip` 确认依赖链已移除；Docker 内 `npm ci --omit=dev` 生产依赖同步受益；supercronic v0.2.48 本机 Go 1.26.6 重建通过 `-test /dev/null` 冒烟验证
 
 ### 迭代（2026-08-11）
 - **性能：成功路径状态文件读取合并**：main 成功路径 `getRenewalStatus` 由 2 次外部读取合并为 1 次——`priorTotalRuns` 用持久化后 `totalRuns > 1` 等价推导（persist 前 N 条 → 后 N+1 条），`hasHistory` 语义不变，每轮减少 1 次文件 I/O

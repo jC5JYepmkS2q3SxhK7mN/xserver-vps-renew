@@ -1,3 +1,11 @@
+# 编译 supercronic：官方 v0.2.48 release 用 Go 1.26.5 构建，低于 Go stdlib 修复版本 1.26.6
+# （CVE-2026-39821 Punycode / CVE-2026-46600 DNS 解析），改用 Go 1.26.6+ 从同 tag 源码重建
+# （ldflags 注入方式与官方 Makefile 一致：-X main.Version）
+FROM golang:1.26 AS supercronic-build
+ARG SUPERCRONIC_VERSION=v0.2.48
+RUN CGO_ENABLED=0 go install -ldflags "-X main.Version=${SUPERCRONIC_VERSION}" \
+        github.com/aptible/supercronic@${SUPERCRONIC_VERSION}
+
 FROM node:22-slim
 
 # 元数据
@@ -19,6 +27,7 @@ RUN apt-get update \
     && apt-get update \
     && apt-get install -y --no-install-recommends google-chrome-stable \
     && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --only-upgrade xvfb xserver-common \
     && rm -rf /var/lib/apt/lists/*
 
 # 持久化 Chrome 用户数据（续期状态文件默认也写在此目录，便于同卷持久化）
@@ -63,18 +72,8 @@ RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuse
     && chmod 1777 /tmp/.X11-unix \
     && chown -R appuser:appuser /data /app /var/log
 
-# 安装 supercronic（支持非 root 的 cron 替代品）
-ARG SUPERCRONIC_VERSION=v0.2.36
-RUN set -e \
-    && arch=$(uname -m) \
-    && case "$arch" in \
-       x86_64)  ARCH_SUFFIX=amd64 ;; \
-       aarch64) ARCH_SUFFIX=arm64 ;; \
-       *) echo "不支持的架构: $arch" >&2; exit 1 ;; \
-       esac \
-    && curl -fsSL "https://github.com/aptible/supercronic/releases/download/${SUPERCRONIC_VERSION}/supercronic-linux-${ARCH_SUFFIX}" \
-      -o /usr/local/bin/supercronic \
-    && chmod +x /usr/local/bin/supercronic
+# 安装 supercronic（多阶段编译产物，Go 1.26.6+ 构建）
+COPY --from=supercronic-build /go/bin/supercronic /usr/local/bin/supercronic
 
 USER appuser
 
