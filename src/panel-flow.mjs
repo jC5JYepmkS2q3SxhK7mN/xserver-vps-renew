@@ -414,6 +414,14 @@ export async function waitForSubmissionResult(
   }
   if (evaluation?.status === 'success') {
     logger.debug(`续期结果轮询命中成功信号（${Date.now() - startedAt}ms 内）`);
+  } else {
+    // 未识别成功信号时输出页面诊断：官方常在提交成功后跳回 xvps/index 列表页，
+    // 兜底 fail 分支只带 URL 不带正文，debug 记录正文便于确认「成功文案」特征
+    const normalizedText = String(pageText || '').replace(/\s+/g, ' ').trim();
+    logger.debug(
+      `[提交结果诊断] 状态=${evaluation?.status || 'unknown'} | URL: ${currentUrl}`
+      + ` | 正文片段: ${normalizedText.slice(0, 500)}`,
+    );
   }
   return { pageText, currentUrl, evaluation };
 }

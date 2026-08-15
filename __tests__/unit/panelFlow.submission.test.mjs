@@ -60,4 +60,40 @@ describe('waitForSubmissionResult', () => {
     await expect(waitForSubmissionResult(page, { timeoutMs: 50, intervalMs: 10 }))
       .resolves.toMatchObject({ evaluation: expect.objectContaining({ status: 'success' }) });
   });
+
+  it('未识别成功信号时输出页面正文诊断（debug），便于定位成功文案', async () => {
+    // 模拟本次事故场景：提交后官方跳回 xvps/index 列表页，正文无已知成功关键词
+    const page = makePage({
+      text: '契約管理\n引き続き無料VPSの利用を継続する\nホーム',
+      url: 'https://secure.xserver.ne.jp/xapanel/xvps/index',
+    });
+    const logger = { debug: vi.fn() };
+    const { evaluation } = await waitForSubmissionResult(page, {
+      timeoutMs: 60,
+      intervalMs: 10,
+      logger,
+    });
+    expect(evaluation.status).not.toBe('success');
+    const diagLines = logger.debug.mock.calls
+      .map((call) => call[0])
+      .filter((line) => line.includes('[提交结果诊断]'));
+    // 诊断仅在轮询结束后输出一次
+    expect(diagLines).toHaveLength(1);
+    expect(diagLines[0]).toContain('URL: https://secure.xserver.ne.jp/xapanel/xvps/index');
+    // 正文应归一化空白后输出（换行折叠为空格）
+    expect(diagLines[0]).toContain('契約管理 引き続き無料VPSの利用を継続する ホーム');
+  });
+
+  it('命中成功信号时不输出正文诊断（仅输出命中日志）', async () => {
+    const page = makePage({
+      text: '手続きが完了しました',
+      url: 'https://secure.xserver.ne.jp/xapanel/xvps/server/freevps/extend/result',
+    });
+    const logger = { debug: vi.fn() };
+    await waitForSubmissionResult(page, { timeoutMs: 50, intervalMs: 10, logger });
+    const diagLines = logger.debug.mock.calls
+      .map((call) => call[0])
+      .filter((line) => line.includes('[提交结果诊断]'));
+    expect(diagLines).toHaveLength(0);
+  });
 });
