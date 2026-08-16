@@ -401,6 +401,13 @@ export function evaluateSubmissionResult(pageText = '', currentUrl = '') {
     };
   }
 
+  // 提交后官方跳回 VPS 列表页（离开 /extend 续期域）视为成功路径：
+  // 实机观察（2026-08）：续期成功后官方跳转回 xvps/index，跳转期间正文可能尚未渲染；
+  // 失败时官方停留 conf 或错误/拦截页（均在 /extend 域内），且上文已排除失败/错误关键词。
+  if (url.includes('/xvps/index')) {
+    return { status: 'success', reason: '提交后跳回 VPS 列表页', matched: 'xvps/index' };
+  }
+
   return {
     status: 'fail',
     reason: `续期状态不明确，请人工检查页面内容。URL: ${url}`,

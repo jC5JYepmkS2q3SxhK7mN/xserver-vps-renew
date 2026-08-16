@@ -354,6 +354,28 @@ describe('evaluateSubmissionResult', () => {
     expect(r.status).toBe('fail');
     expect(r.reason).toContain('不明确');
   });
+
+  it('提交后跳回 VPS 列表页 → success（官方成功路径，正文可能尚未渲染）', () => {
+    const r = evaluateSubmissionResult('', 'https://secure.xserver.ne.jp/xapanel/xvps/index');
+    expect(r.status).toBe('success');
+    expect(r.matched).toBe('xvps/index');
+  });
+
+  it('跳回列表页但含认证失败标识 → 仍按 retry 处理', () => {
+    const r = evaluateSubmissionResult('認証に失敗しました', 'https://secure.xserver.ne.jp/xapanel/xvps/index');
+    expect(r.status).toBe('retry');
+  });
+
+  it('跳回列表页但含错误标识 → 仍按 fail 处理', () => {
+    const r = evaluateSubmissionResult('システムエラー', 'https://secure.xserver.ne.jp/xapanel/xvps/index');
+    expect(r.status).toBe('fail');
+  });
+
+  it('仍在续期域内（conf 外的其他页）无明确标识 → 仍为 fail 不明确', () => {
+    const r = evaluateSubmissionResult('hello world', 'https://secure.xserver.ne.jp/xapanel/xvps/server/freevps/extend/do');
+    expect(r.status).toBe('fail');
+    expect(r.reason).toContain('不明确');
+  });
 });
 
 describe('extractExpireDateFromText', () => {

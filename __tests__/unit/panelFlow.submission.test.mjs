@@ -62,10 +62,10 @@ describe('waitForSubmissionResult', () => {
   });
 
   it('未识别成功信号时输出页面正文诊断（debug），便于定位成功文案', async () => {
-    // 模拟本次事故场景：提交后官方跳回 xvps/index 列表页，正文无已知成功关键词
+    // 提交后仍停留在续期域内、正文无已知成功关键词（如跳转中间态）
     const page = makePage({
       text: '契約管理\n引き続き無料VPSの利用を継続する\nホーム',
-      url: 'https://secure.xserver.ne.jp/xapanel/xvps/index',
+      url: 'https://secure.xserver.ne.jp/xapanel/xvps/server/freevps/extend/do',
     });
     const logger = { debug: vi.fn() };
     const { evaluation } = await waitForSubmissionResult(page, {
@@ -79,7 +79,7 @@ describe('waitForSubmissionResult', () => {
       .filter((line) => line.includes('[提交结果诊断]'));
     // 诊断仅在轮询结束后输出一次
     expect(diagLines).toHaveLength(1);
-    expect(diagLines[0]).toContain('URL: https://secure.xserver.ne.jp/xapanel/xvps/index');
+    expect(diagLines[0]).toContain('URL: https://secure.xserver.ne.jp/xapanel/xvps/server/freevps/extend/do');
     // 正文应归一化空白后输出（换行折叠为空格）
     expect(diagLines[0]).toContain('契約管理 引き続き無料VPSの利用を継続する ホーム');
   });
@@ -95,5 +95,19 @@ describe('waitForSubmissionResult', () => {
       .map((call) => call[0])
       .filter((line) => line.includes('[提交结果诊断]'));
     expect(diagLines).toHaveLength(0);
+  });
+
+  it('提交后跳回 xvps/index 列表页（正文尚未渲染）→ success', async () => {
+    // 本次事故场景：提交成功官方跳回列表页，但跳转期间正文为空
+    const page = makePage({
+      text: '',
+      url: 'https://secure.xserver.ne.jp/xapanel/xvps/index',
+    });
+    const { evaluation } = await waitForSubmissionResult(page, {
+      timeoutMs: 60,
+      intervalMs: 10,
+    });
+    expect(evaluation.status).toBe('success');
+    expect(evaluation.matched).toBe('xvps/index');
   });
 });

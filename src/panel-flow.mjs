@@ -398,7 +398,7 @@ async function navigateForCaptchaRetry(page, currentUrl, renewUrl, { config, log
  */
 export async function waitForSubmissionResult(
   page,
-  { timeoutMs = 2000, intervalMs = 400, logger = NOOP_LOGGER } = {},
+  { timeoutMs = 5000, intervalMs = 400, logger = NOOP_LOGGER } = {},
 ) {
   const startedAt = Date.now();
   const deadline = startedAt + timeoutMs;
