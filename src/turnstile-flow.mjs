@@ -159,6 +159,50 @@ export async function waitForTurnstileToken(
 }
 
 /**
+ * 是否为「页面导航导致 frame 脱离」类错误（Puppeteer 抛错，可安全原地重试）
+ * API 求解期间页面若发生导航 / iframe 重建，page.evaluate 会命中已脱离的 frame；
+ * 重试时 evaluate 会自动绑定新的主 frame，通常一次即恢复
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+function isFrameDetachError(error) {
+  const msg = String(error?.message || '');
+  return msg.includes('detached Frame')
+    || msg.includes('Frame was detached')
+    || msg.includes('Execution context was destroyed')
+    || msg.includes('Cannot find context with specified id');
+}
+
+/**
+ * Turnstile token 注入（含 frame 脱离重试）
+ * 对 detached-frame 类错误原地重试（默认最多 2 次，间隔 1.5s 等待页面稳定）；
+ * 非 frame 脱离类错误立即上抛，不掩盖真实失败
+ * @param {import('puppeteer').Page} page
+ * @param {string} token
+ * @param {object} [logger=NOOP_LOGGER]
+ * @param {{ maxRetries?: number, retryDelayMs?: number, injectFn?: Function }} [opts]
+ *   injectFn 可注入（便于单测）；默认 injectTurnstileToken
+ * @returns {Promise<object|boolean>} 透传 injectTurnstileToken 的返回值
+ */
+export async function injectTurnstileTokenWithRetry(page, token, logger = NOOP_LOGGER, opts = {}) {
+  const { maxRetries = 2, retryDelayMs = 1500, injectFn = injectTurnstileToken } = opts;
+  let lastError;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await injectFn(page, token, logger);
+    } catch (error) {
+      lastError = error;
+      if (!isFrameDetachError(error)) throw error;
+      logger.warn(
+        `Turnstile token 注入遇页面导航（frame 脱离），第 ${attempt + 1}/${maxRetries + 1} 次重试...`,
+      );
+      await sleep(retryDelayMs);
+    }
+  }
+  throw lastError;
+}
+
+/**
  * 处理 Cloudflare Turnstile
  * @param {import('puppeteer').Page} page
  * @param {{ config?: object, logger?: object }} [opts] - config 为 CONFIG（含各超时与提供商配置）
@@ -243,8 +287,20 @@ export async function waitForTurnstile(page, { config, logger = NOOP_LOGGER } = 
       logger.info(`Turnstile 由 ${providerLabel} 求解成功`);
 
       // 注入 token（含回调触发）——单次调用即完成「写字段 + 触发 data-callback」，
-      // 避免回调被重复触发（注入逻辑见 src/turnstile.mjs 的 injectTurnstileToken）
-      const injected = await injectTurnstileToken(page, result.token, logger);
+      // 避免回调被重复触发（注入逻辑见 src/turnstile.mjs 的 injectTurnstileToken）。
+      // API 求解期间页面可能发生导航（Cloudflare 挑战重载等），evaluate 会命中
+      // detached frame 抛错；对这类错误原地重试，避免把「已解出 token」误判为求解失败
+      let injected;
+      try {
+        injected = await injectTurnstileTokenWithRetry(page, result.token, logger);
+      } catch (injectError) {
+        logger.error(`Turnstile token 注入失败: ${injectError.message}`);
+        return {
+          ok: false,
+          reason: 'Turnstile token 注入失败（页面导航导致）',
+          attempts: Array.isArray(result.attempts) ? result.attempts : [],
+        };
+      }
       if (injected.callbackCalled) {
         logger.debug('Turnstile token 已通过 callback 传递');
       } else {

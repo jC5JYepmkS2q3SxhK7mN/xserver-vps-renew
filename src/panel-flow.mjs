@@ -389,9 +389,12 @@ async function navigateForCaptchaRetry(page, currentUrl, renewUrl, { config, log
 /**
  * 提交后轮询等待续期结果（替代固定 sleep(2000)）
  * 每 intervalMs 读取一次页面正文与 URL 并评估：
- * - 出现明确「成功」信号立即返回（正常路径提速）
- * - 其余情况持续轮询至 timeoutMs（与原固定等待的行为下限一致），
- *   避免在成功页渲染完成前过早读到中间态而误判失败
+ * - success / retry（服务端已响应的明确结果）立即返回，避免无谓空等
+ * - pending（仍停留确认页无失败标识，服务端处理中）/ fail 持续轮询至 timeoutMs——
+ *   实机提交后官方处理需 60-90s，页面停留 conf 期间不代表失败，过早判定并重试会
+ *   中止在途 POST（ERR_ABORTED）导致本可成功的提交被误判（2026-08 两次手动运行日志对比）；
+ *   fail 不提前终止同理：提交导航的中间态可能瞬时读到旧文档产生「状态不明确」
+ * - 超时仍未响应时把 pending 归一化为 retry（页面未跳转），由调用方按重试处理
  * @param {import('puppeteer').Page} page
  * @param {{ timeoutMs?: number, intervalMs?: number, logger?: object }} [opts]
  * @returns {Promise<{ pageText: string, currentUrl: string, evaluation: object }>}
@@ -409,9 +412,24 @@ export async function waitForSubmissionResult(
     pageText = await getBodyText(page);
     currentUrl = page.url();
     evaluation = evaluateSubmissionResult(pageText, currentUrl);
-    if (evaluation.status === 'success') break;
+    // 提前返回仅限服务端已响应的明确结果：
+    // - success 正常提速；retry（認証に失敗 等）为已响应的可重试失败，等下去不会改变
+    // - pending / fail 继续轮询：提交导航的中间态可能瞬时读到旧文档（URL=/extend/do、
+    //   正文为 conf 表单），此时 fail「状态不明确」不代表最终结果，提前终止会把
+    //   本可成功的提交误判为不可重试失败
+    if (evaluation.status === 'success' || evaluation.status === 'retry') break;
     await sleep(intervalMs);
   }
+
+  // 超时仍停留在确认页（pending）：服务端未在窗口内响应，按可重试失败归一化
+  if (evaluation?.status === 'pending') {
+    evaluation = {
+      status: 'retry',
+      reason: '页面未跳转，可能验证码或 token 无效',
+      matched: '/conf',
+    };
+  }
+
   if (evaluation?.status === 'success') {
     logger.debug(`续期结果轮询命中成功信号（${Date.now() - startedAt}ms 内）`);
   } else {
@@ -484,7 +502,7 @@ export async function handleCaptchaPage(page, options = {}, { config, logger = N
 
       // 无有效 Turnstile 时禁止强制提交（否则必然 認証に失敗，且 /do 重试常无验证码图）
       if (!shouldSubmitAfterTurnstile(turnstileResult) && !turnstileAlreadyPassed) {
-        throw new Error('Turnstile 未通过，跳过提交以免认证失败');
+        throw new Error(turnstileResult?.reason || 'Turnstile 未通过，跳过提交以免认证失败');
       }
 
       // 提交表单
@@ -498,8 +516,12 @@ export async function handleCaptchaPage(page, options = {}, { config, logger = N
       // 提交后页面 URL 由轮询结果行（info）统一输出，此处降噪为 debug，避免相邻两条重复 URL 日志
       logger.debug(`提交完成，当前页面: ${page.url()}`);
 
-      // 验证续期是否真正成功：轮询等待明确结果（成功信号提前返回，行为下限与原固定 2s 一致）
-      const { pageText, currentUrl, evaluation } = await waitForSubmissionResult(page, { logger });
+      // 验证续期是否真正成功：长轮询等待服务端处理结果（官方处理需 60-90s，
+      // 停留 conf 页期间持续等待而非判定失败；成功/明确失败信号提前返回）
+      const { pageText, currentUrl, evaluation } = await waitForSubmissionResult(page, {
+        timeoutMs: config.SUBMISSION_RESULT_TIMEOUT_MS,
+        logger,
+      });
 
       logger.info(`📄 续期提交后页面 URL: ${currentUrl}`);
 

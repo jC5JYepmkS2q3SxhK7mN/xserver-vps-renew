@@ -25,21 +25,22 @@ describe('waitForSubmissionResult', () => {
     expect(page.evaluate).toHaveBeenCalledTimes(1);
   });
 
-  it('始终停留在 conf 页（retry）时轮询至超时，返回最后一次评估', async () => {
+  it('服务端已响应明确失败（conf 页含 認証に失敗）时提前返回 retry，不再空等', async () => {
     const page = makePage({
       text: '認証に失敗しました',
       url: 'https://secure.xserver.ne.jp/xapanel/xvps/server/freevps/extend/conf',
     });
     const { evaluation } = await waitForSubmissionResult(page, {
-      timeoutMs: 60,
+      timeoutMs: 2000,
       intervalMs: 10,
     });
     expect(evaluation.status).toBe('retry');
-    // 未命中成功信号：应轮询多次（远多于 1 次）
-    expect(page.evaluate.mock.calls.length).toBeGreaterThan(1);
+    expect(evaluation.matched).toBe('認証に失敗');
+    // 终态提前返回：正文只读取一次
+    expect(page.evaluate).toHaveBeenCalledTimes(1);
   });
 
-  it('失败标识但未命中成功信号时同样等待至超时，避免过早误判', async () => {
+  it('业务硬错误（信用卡）持续轮询至超时返回 fail（fail 不提前终止，防中间态误判）', async () => {
     const page = makePage({
       text: 'クレジットカードを登録してください',
       url: 'https://secure.xserver.ne.jp/xapanel/xvps/server/freevps/extend/result',
@@ -49,7 +50,48 @@ describe('waitForSubmissionResult', () => {
       intervalMs: 10,
     });
     expect(evaluation.status).toBe('fail');
+    // 提交导航中间态可能瞬时读到 fail「状态不明确」，需持续轮询等最终结果
     expect(page.evaluate.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('服务端处理中（conf 页无失败标识）持续轮询至超时 → 归一化为 retry', async () => {
+    // 2026-08 事故场景：提交后官方处理需 60-90s，期间页面停留 conf；
+    // 轮询窗口内未响应时按可重试失败归一化（不再提前中止在途 POST 后误判）
+    const page = makePage({
+      text: '画像認証 画像にひらがなで書かれている6桁の数字',
+      url: 'https://secure.xserver.ne.jp/xapanel/xvps/server/freevps/extend/conf',
+    });
+    const { evaluation } = await waitForSubmissionResult(page, {
+      timeoutMs: 60,
+      intervalMs: 10,
+    });
+    expect(evaluation.status).toBe('retry');
+    expect(evaluation.reason).toContain('页面未跳转');
+    // 处理中状态应持续轮询（远多于 1 次），而非读到中间态就立即判定
+    expect(page.evaluate.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('服务端延迟响应（处理中转成功）时轮询命中 success，不再误判失败', async () => {
+    // 第二次手动运行对照：提交后 ~72s 才跳转 xvps/index 成功，
+    // 轮询期间页面先停留 conf（pending）后跳转成功页
+    let reads = 0;
+    const page = {
+      evaluate: vi.fn().mockImplementation(async () => {
+        reads++;
+        return reads < 3 ? '画像認証 6桁の数字を入力' : '手続きが完了しました';
+      }),
+      url: vi.fn().mockImplementation(() => (
+        reads < 3
+          ? 'https://secure.xserver.ne.jp/xapanel/xvps/server/freevps/extend/conf'
+          : 'https://secure.xserver.ne.jp/xapanel/xvps/server/freevps/extend/result'
+      )),
+    };
+    const { evaluation } = await waitForSubmissionResult(page, {
+      timeoutMs: 2000,
+      intervalMs: 10,
+    });
+    expect(evaluation.status).toBe('success');
+    expect(reads).toBe(3);
   });
 
   it('无 logger 时不报错（默认 NOOP_LOGGER）', async () => {

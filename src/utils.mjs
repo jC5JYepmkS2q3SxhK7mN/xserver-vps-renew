@@ -358,3 +358,37 @@ export function cleanChromeLocks(userDataDir) {
     try { rmSync(lockPath, { force: true }); } catch { /* 忽略 */ }
   }
 }
+
+/** 已知埋点/统计域名：请求被页面导航中止属正常现象，debug 日志降噪用 */
+const BENIGN_TRACKING_HOSTS = [
+  'google-analytics.com',
+  'analytics.google.com',
+  'googletagmanager.com',
+  'googleadservices.com',
+  'doubleclick.net',
+  'apm.yahoo.co.jp',
+];
+
+/**
+ * 是否为可忽略的埋点类请求失败（纯函数）
+ * 页面跳转时 Google Analytics / 广告回传等 beacon 请求被浏览器中止（ERR_ABORTED）
+ * 属正常现象；命中已知埋点域名的失败不写入 debug 日志，避免刷屏挤占条数上限，
+ * 让「请求失败」日志只保留对排障有意义的请求（xserver 面板 / Cloudflare 挑战等）
+ * @param {string} url - 失败的请求 URL
+ * @returns {boolean}
+ */
+export function isBenignRequestFailure(url) {
+  if (!url || typeof url !== 'string') return false;
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  const host = parsed.hostname;
+  // 命中埋点域名（含子域，如 www.google-analytics.com / stats.g.doubleclick.net）
+  if (BENIGN_TRACKING_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))) return true;
+  // google.com 的广告/转化回传（ccm/rmkt collect）同样在导航时被中止
+  return (host === 'google.com' || host === 'www.google.com')
+    && /^\/(ccm|rmkt)\/collect/.test(parsed.pathname);
+}

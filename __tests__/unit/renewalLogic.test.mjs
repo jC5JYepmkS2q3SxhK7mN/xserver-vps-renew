@@ -309,15 +309,27 @@ describe('shouldSubmitAfterTurnstile', () => {
 });
 
 describe('evaluateSubmissionResult', () => {
-  it('仍在 conf 页 → retry', () => {
+  it('仍在 conf 页且无失败标识 → pending（服务端处理中，不再即时判定失败）', () => {
     const r = evaluateSubmissionResult('何か', 'https://x/conf');
-    expect(r.status).toBe('retry');
+    expect(r.status).toBe('pending');
+    expect(r.matched).toBe('/conf');
   });
 
   it('conf 页含认证失败 → retry 且匹配', () => {
     const r = evaluateSubmissionResult('認証に失敗しました', 'https://x/conf');
     expect(r.status).toBe('retry');
     expect(r.matched).toBe('認証に失敗');
+  });
+
+  it('conf 页含明确失败关键词 → retry', () => {
+    const r = evaluateSubmissionResult('失敗しました', 'https://x/conf');
+    expect(r.status).toBe('retry');
+    expect(r.matched).toBe('失敗しました');
+  });
+
+  it('conf 页含硬错误标识 → fail（服务端已响应的非重试错误）', () => {
+    const r = evaluateSubmissionResult('システムエラー', 'https://x/conf');
+    expect(r.status).toBe('fail');
   });
 
   it('明确失败关键词 → retry', () => {

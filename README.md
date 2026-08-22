@@ -224,6 +224,7 @@ Anti-Captcha 适合作为 **CapSolver 等之后的异构备份**，单独作主�
 | `TURNSTILE_TIMEOUT_MS` | `60000` | Turnstile 自然通过等待超时（毫秒） |
 | `TURNSTILE_API_TIMEOUT_MS` | `120000` | Turnstile API 求解轮询超时（毫秒） |
 | `CAPTCHA_MAX_RETRY` | `3` | 图形验证码识别最大重试次数 |
+| `SUBMISSION_RESULT_TIMEOUT_MS` | `120000` | 提交后等待服务端处理结果的轮询上限（官方处理需 60-90s；过短会中止在途提交导致误判失败） |
 | `NOTIFY_NEXT_RUN_HOURS` | `6` | 成功通知中「下次检查」的估算间隔（小时）；外部平台定时拉起容器时建议与平台调度一致 |
 | `ENABLE_DIAGNOSTICS` | 未启用 | 设为 `true` 时容器启动阶段运行 `diagnostics.sh` 环境诊断 |
 

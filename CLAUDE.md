@@ -6,7 +6,7 @@
 
 | 日期 | 变更内容 |
 |------|----------|
-| 2026-08-14 | 任务 38：修复 Dependabot alert GHSA-jmr9-qjv8-65gv（extract-zip 符号链接路径遍历，上游无修复版）：`overrides` 强制 `@puppeteer/browsers` 2.10.3→3.2.0（改用 modern-tar，移除 extract-zip 依赖链，核对 rebrowser-puppeteer-core 14 个导出符号兼容）；顺带修复 audit 检出的 dev 链 nanoid<3.3.18（overrides 3.3.18）；engines 上调 Node>=22.12.0（Docker/CI 均满足）；`npm audit` 0 漏洞（23 文件 / 439 用例）。CI Trivy 门禁修复：xorg `deb12u12`→`deb12u13`（Dockerfile `--only-upgrade xvfb xserver-common` 破缓存）；supercronic 官方 release Go 工具链过旧（v0.2.36=1.24.6、v0.2.48=1.26.5 均 < 修复版 1.26.6），改多阶段构建用 golang:1.26 从同 tag 重建（ldflags 同官方 Makefile） |
+| 2026-08-22 | 任务 39：修复两次手动运行暴露的两个竞态——(1) 提交结果判定过早：官方 /extend/do 处理需 60-90s，`evaluateSubmissionResult` 对「停留 conf 无失败标识」从即时 retry 改为 `pending`，`waitForSubmissionResult` 长轮询至 `SUBMISSION_RESULT_TIMEOUT_MS`（新配置，默认 120s，三处同步），避免重试导航中止在途 POST（ERR_ABORTED）把可成功的提交误判失败；(2) Turnstile token 注入撞 detached frame：新增 `injectTurnstileTokenWithRetry`（frame 脱离类错误原地重试 2 次），失败原因区分「求解失败」与「注入失败」并透传至通知；顺带 debug 日志埋点请求失败降噪 `isBenignRequestFailure`（GA/广告回传被导航中止不再刷屏）（24 文件 / 458 用例） |
 | 2026-08-11 | 任务 37 十轮迭代：成功路径状态文件读取合并（3 次→2 次 I/O，`priorTotalRuns` 由 `totalRuns>1` 推导）；debug 级浏览器 console/pageerror/requestfailed 监听（条数上限防刷屏）；失败通知附验证码重试次数 `captchaRetries`（`error.captchaAttempts`，+2 用例）；日志超长截断 `clampLogMessage`（+3 用例）与 `[步骤N]` 序号；用户脚本 Turnstile token 监听改轮询主路径（原 MutationObserver 仅观察 attribute 恒等超时）；用户脚本状态面板标题/关闭按钮/success 3s 自动收起；22 个多余导出收敛 + `pollTurnstileTaskResult` 拆分 + theme/action 精简；CLI `--version/--help` + 启动横幅文档入口；人工确认通知「下次执行」→「下次检查」（23 文件 / 439 用例） |
 | 2026-08-08 | 任务 36 十轮迭代：Turnstile 截图按 debug 按需写入（`SAVE_TURNSTILE_SCREENSHOTS`）；`page.close` 异常防御 `safeClosePage` 防双通知；自然通过降级立即点击；VPS 行解析纯函数 `extractVpsInfoFromCellTexts`；skip 日志去重；人工确认通知补本地 Node 重跑命令；用户脚本 Turnstile 超时不再强制提交；诊断脚本代理地址脱敏；新到期日提取收敛 `extractNewExpireDate`；entrypoint/cron-run/diagnostics 时间戳显式 `TZ`（23 文件 / 430 用例） |
 | 2026-08-07 | 迭代打磨：分阶段耗时日志（pushStep 每步耗时）；`waitForSubmissionResult` 提交后轮询成功信号替代固定 2s（+4 用例）；Turnstile 注入后 token 软等待；通知/日志时间格式统一（`formatTokyoDateTime` 委托 `formatLogTimestamp`）；失败通知补「下次检查」行；Turnstile 轮询 debug 日志降噪（每 5 轮）；启动日志打印上次运行结果摘要；用户脚本 UI 无障碍（reduced-motion/aria-live/滚动）；`diagnostics.sh` 新增 Keras + 打码平台 API 连通性探测（22 文件 / 410 用例） |
@@ -251,6 +251,7 @@ npm run test:watch
 | `TURNSTILE_TIMEOUT_MS` | Turnstile 自然通过等待超时 | `60000` |
 | `TURNSTILE_API_TIMEOUT_MS` | Turnstile API 求解轮询超时 | `120000` |
 | `CAPTCHA_MAX_RETRY` | 验证码识别最大重试次数 | `3` |
+| `SUBMISSION_RESULT_TIMEOUT_MS` | 提交后等待服务端处理结果的轮询上限（官方处理需 60-90s；过短会中止在途提交导致误判失败） | `120000` |
 
 ---
 

@@ -16,6 +16,7 @@ import {
   formatLogTimestamp,
   analyzeFingerprintHealth,
   shouldSaveTurnstileScreenshot,
+  isBenignRequestFailure,
   TOKYO_OFFSET_MS,
   PROJECT_REPO_URL,
   PROJECT_COPYRIGHT,
@@ -430,5 +431,32 @@ describe('formatTokyoDateTime', () => {
       if (prev === undefined) delete process.env.TZ;
       else process.env.TZ = prev;
     }
+  });
+});
+
+describe('isBenignRequestFailure', () => {
+  it('Google Analytics / 广告回传等埋点域名 → true（导航中止属正常）', () => {
+    expect(isBenignRequestFailure('https://www.google-analytics.com/g/collect?v=2&tid=G-K5TNH3RRR3')).toBe(true);
+    expect(isBenignRequestFailure('https://analytics.google.com/g/collect?v=2&tid=G-MV0DS4LC12')).toBe(true);
+    expect(isBenignRequestFailure('https://googletagmanager.com/gtag/js?id=G-123')).toBe(true);
+    expect(isBenignRequestFailure('https://stats.g.doubleclick.net/r/collect')).toBe(true);
+    expect(isBenignRequestFailure('https://apm.yahoo.co.jp/rt/?p=DKA25PHMA5')).toBe(true);
+  });
+
+  it('google.com 的 ccm/rmkt 转化回传 → true', () => {
+    expect(isBenignRequestFailure('https://www.google.com/ccm/collect?rcb=1&frm=0&dt=XServer%20VPS')).toBe(true);
+    expect(isBenignRequestFailure('https://www.google.com/rmkt/collect/1071804905/?cv=11')).toBe(true);
+  });
+
+  it('面板/Cloudflare 等排障相关请求 → false（保留输出）', () => {
+    expect(isBenignRequestFailure('https://secure.xserver.ne.jp/xapanel/xvps/server/freevps/extend/do')).toBe(false);
+    expect(isBenignRequestFailure('https://brunhild.challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/i/abc')).toBe(false);
+    expect(isBenignRequestFailure('https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/123')).toBe(false);
+  });
+
+  it('非法输入 → false', () => {
+    expect(isBenignRequestFailure('')).toBe(false);
+    expect(isBenignRequestFailure('not-a-url')).toBe(false);
+    expect(isBenignRequestFailure(null)).toBe(false);
   });
 });

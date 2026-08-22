@@ -358,19 +358,27 @@ export function shouldSubmitAfterTurnstile(turnstileResult) {
  * 解析续期提交后的页面结果（纯函数）
  * @param {string} pageText - document.body.innerText
  * @param {string} currentUrl - 当前 URL
- * @returns {{ status: 'success'|'retry'|'fail', reason: string, matched?: string }}
+ * @returns {{ status: 'success'|'retry'|'fail'|'pending', reason: string, matched?: string }}
+ *   pending = 仍在确认页且无失败标识（服务端处理中，等待轮询）；超时后由调用方按 retry 处理
  */
 export function evaluateSubmissionResult(pageText = '', currentUrl = '') {
   const text = String(pageText || '');
   const url = String(currentUrl || '');
 
-  // 仍在确认页：通常验证码/Turnstile 未通过，可重试
+  // 仍在确认页：区分「服务端已响应的明确失败」与「仍在处理中」。
+  // 实机（2026-08）提交后官方 /extend/do 处理需 60-90s，期间页面停留 conf，
+  // 无失败标识时不能判定为失败——否则重试导航会中止在途 POST（ERR_ABORTED），
+  // 使本可成功的提交被误判（两次手动运行日志：第一次提前判定失败、第二次 72s 后才跳转成功）。
   if (url.includes('/conf')) {
-    const hasAuthFail = text.includes('認証に失敗');
-    const reason = hasAuthFail
-      ? '验证码识别错误或 Turnstile 认证失败'
-      : '页面未跳转，可能验证码或 token 无效';
-    return { status: 'retry', reason, matched: hasAuthFail ? '認証に失敗' : '/conf' };
+    const confFailure = FAILURE_PATTERNS.find((pat) => text.includes(pat));
+    if (confFailure) {
+      return { status: 'retry', reason: confFailure, matched: confFailure };
+    }
+    const confError = ERROR_PATTERNS.find((pat) => text.includes(pat));
+    if (confError) {
+      return { status: 'fail', reason: `出现错误标识: ${confError}`, matched: confError };
+    }
+    return { status: 'pending', reason: '页面停留确认页，等待服务端处理', matched: '/conf' };
   }
 
   // 明确失败标识 → 可重试

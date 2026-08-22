@@ -72,6 +72,7 @@ import {
   findChromePath,
   cleanChromeLocks,
   formatTokyoDateTime,
+  isBenignRequestFailure,
   PROJECT_SOURCE_LINE,
   PROJECT_REPO_URL,
   DEFAULT_LOG_LEVEL,
@@ -152,6 +153,9 @@ const CONFIG = {
   TURNSTILE_TIMEOUT: parsePositiveInt(process.env.TURNSTILE_TIMEOUT_MS, 60_000, { min: 10_000, max: 300_000 }),
   TURNSTILE_API_TIMEOUT: parsePositiveInt(process.env.TURNSTILE_API_TIMEOUT_MS, 120_000, { min: 15_000, max: 300_000 }),
   CAPTCHA_MAX_RETRY: parsePositiveInt(process.env.CAPTCHA_MAX_RETRY, 3, { min: 1, max: 10 }),
+  // 提交后等待服务端处理结果的轮询上限（官方 /extend/do 处理实测 60-90s；
+  // 过早判定失败会中止在途 POST，需覆盖服务端处理时间）
+  SUBMISSION_RESULT_TIMEOUT_MS: parsePositiveInt(process.env.SUBMISSION_RESULT_TIMEOUT_MS, 120_000, { min: 15_000, max: 300_000 }),
 
   CHROME_PATH: process.env.CHROME_PATH || findChromePath(),
   CHROME_USER_DATA: process.env.CHROME_USER_DATA || '/data/chrome-profile',
@@ -582,9 +586,13 @@ async function main() {
       const reqFailCap = { count: 0, max: 50 };
       page.on('requestfailed', (req) => {
         if (reqFailCap.count >= reqFailCap.max) return;
+        const url = req.url();
+        // 埋点 beacon 在页面导航时被中止（ERR_ABORTED）属正常现象，降噪跳过；
+        // 保留面板/Cloudflare 等对排障有意义的失败请求
+        if (isBenignRequestFailure(url)) return;
         reqFailCap.count++;
         const failure = req.failure?.();
-        logDebug(`[请求失败] ${failure?.errorText || '未知原因'}: ${req.url().slice(0, 200)}`);
+        logDebug(`[请求失败] ${failure?.errorText || '未知原因'}: ${url.slice(0, 200)}`);
       });
     }
 
