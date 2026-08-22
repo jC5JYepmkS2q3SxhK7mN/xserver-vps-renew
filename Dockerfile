@@ -36,14 +36,15 @@ VOLUME /data/chrome-profile
 WORKDIR /app
 
 # 先复制 package.json 安装依赖（利用 Docker 缓存层）
-# npm 仅构建期工具：ci 完成后整体移除（含 npx/corepack），
-# 消除基础镜像 npm 捆绑运行期依赖的 CVE 打地鼠（picomatch/sigstore/tar 三轮皆源于此）；
+# npm 仅构建期工具：ci 完成后整体移除（含 npx/corepack/yarn，node 基础镜像自带的
+# 包管理器全部清掉），消除捆绑运行期依赖的 CVE 打地鼠（picomatch/sigstore/tar 皆源于此）；
 # 运行时仅需 node（entrypoint 直接执行 node 主脚本）
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev \
     && npm cache clean --force \
     && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
-       /usr/local/lib/node_modules/corepack /usr/local/bin/corepack
+       /usr/local/lib/node_modules/corepack /usr/local/bin/corepack \
+       /opt/yarn-v1.22.22 /usr/local/bin/yarn /usr/local/bin/yarnpkg
 
 # 复制项目文件
 COPY xserver-vps-renew.mjs .
