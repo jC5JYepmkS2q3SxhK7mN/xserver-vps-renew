@@ -38,9 +38,14 @@ WORKDIR /app
 # 先复制 package.json 安装依赖（利用 Docker 缓存层）
 # 顺序：先用镜像自带 npm 执行 ci（避免 npm@latest 对 remote tarball 的 EALLOWREMOTE），
 # 再升级 npm，修补基础镜像自带 npm 内嵌的 picomatch/sigstore 等 HIGH 漏洞
+# npm 官方 tarball 捆绑的运行期依赖 tar 落后于修复版（CVE-2026-73566，7.5.19→7.5.21）；
+# `npm install -g npm@latest` 直接解包捆绑依赖、不会按 semver 重新解析，需显式升级 npm 内部 tar
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev \
     && npm install -g npm@latest \
+    && npm install -g tar@7.5.22 \
+    && rm -rf /usr/local/lib/node_modules/npm/node_modules/tar \
+    && cp -r /usr/local/lib/node_modules/tar /usr/local/lib/node_modules/npm/node_modules/tar \
     && npm cache clean --force
 
 # 复制项目文件
