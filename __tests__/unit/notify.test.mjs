@@ -671,6 +671,9 @@ describe('buildFailureNotifyMessage', () => {
     expect(msg).toContain('手动登录');
     expect(msg).toContain('CapSolver');
     expect(msg).toContain('AntiCaptcha');
+    // 加粗标签统一为 <b>（Telegram HTML 两种都支持，但项目内不混用 <strong>）
+    expect(msg).not.toContain('<strong>');
+    expect(msg).toContain('<b>今天内手动登录官网续期</b>');
   });
 
   it('errorCode 为 TURNSTILE_ALL_PROVIDERS_FAILED 时同样升级', () => {

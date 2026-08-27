@@ -894,7 +894,7 @@ export function buildFailureNotifyMessage({
     `${multiProviderOutage || failureMeta.category === FAILURE_CATEGORY.TURNSTILE_OUTAGE
       ? `🛑 <b>Turnstile 打码平台已全部失败</b>${failedLabels.length
         ? `（${escapeHtml(failedLabels.join(' → '))}）`
-        : ''}，请<strong>今天内手动登录官网续期</strong>，否则 VPS 可能被删除！\n`
+        : ''}，请<b>今天内手动登录官网续期</b>，否则 VPS 可能被删除！\n`
       : ''}` +
     `${escalate && consecutiveFailures > 0
       ? `⚠️ <b>连续失败 ${consecutiveFailures} 次</b>，请立即人工介入！\n`

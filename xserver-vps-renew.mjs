@@ -270,7 +270,8 @@ const LOGGER = { info: log, debug: logDebug, warn: logWarn, error: err };
 /**
  * 发送 Telegram 通知
  * @param {string} message
- * @param {{ kind?: 'success'|'skip'|'failure'|'other' }} [opts]
+ * @param {{ kind?: 'success'|'skip'|'failure'|'manual_confirm'|'other' }} [opts]
+ *   kind 仅用于 skip 类开关判定（skip 且 TG_NOTIFY_SKIP=false 时不推送），其余归类为 'other'
  */
 async function notify(message, opts = {}) {
   const kind = opts.kind || 'other';
