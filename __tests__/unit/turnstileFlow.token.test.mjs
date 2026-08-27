@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { waitForTurnstileToken } from '../../src/turnstile-flow.mjs';
+import { waitForTurnstileToken, getTurnstileToken } from '../../src/turnstile-flow.mjs';
 import { NOOP_LOGGER } from '../../src/utils.mjs';
 
 describe('waitForTurnstileToken', () => {
@@ -41,5 +41,21 @@ describe('waitForTurnstileToken', () => {
     expect(ok).toBe(false);
     // 2.2s 窗口内：首次立即 + 10s 间隔未到 → 恰好 1 次
     expect(clickFn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('getTurnstileToken', () => {
+  it('读取失败按无 token 返回空串，且仅记 debug（导航竞态非 error 级异常）', async () => {
+    const page = { evaluate: vi.fn().mockRejectedValue(new Error('detached Frame')) };
+    const logger = { debug: vi.fn(), error: vi.fn() };
+    const token = await getTurnstileToken(page, logger);
+    expect(token).toBe('');
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('detached Frame'));
+  });
+
+  it('evaluate 异常时不向 NOOP_LOGGER 外抛错', async () => {
+    const page = { evaluate: vi.fn().mockRejectedValue(new Error('x')) };
+    await expect(getTurnstileToken(page, NOOP_LOGGER)).resolves.toBe('');
   });
 });

@@ -363,13 +363,14 @@ describe('isIpProxyAddress / resolveAntiCaptchaProxyMode', () => {
     const p = listTurnstileProviders(config)[0];
     expect(p.supportsProxy).toBe(false);
     expect(p.taskType).toBe('TurnstileTaskProxyless');
-    // 触发 failover 内的启动日志
+    // 触发 failover 入口的提示日志（启动段/求解时的 info 级提示在主脚本与
+    // solveTurnstileViaAPI 输出；failover 入口为 debug 级，避免同一运行重复提示）
     const solveFn = vi.fn().mockResolvedValue({ token: 't', userAgent: null });
     await solveTurnstileWithFailover(
       'https://ex.com', { sitekey: '0x4' }, config, logger,
       { maxFailuresPerProvider: 1, solveFn },
     );
-    const joined = logger.info.mock.calls.map((c) => c[0]).join('\n');
+    const joined = logger.debug.mock.calls.map((c) => c[0]).join('\n');
     expect(joined).toMatch(/域名代理|Proxyless/);
   });
 });

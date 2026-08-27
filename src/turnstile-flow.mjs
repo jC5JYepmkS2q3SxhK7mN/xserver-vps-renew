@@ -113,7 +113,9 @@ export async function getTurnstileToken(page, logger = NOOP_LOGGER) {
       return '';
     });
   } catch (error) {
-    logger.error(`获取 Turnstile token 失败: ${error.message}`);
+    // 本函数在轮询/软等待路径中被反复调用，页面导航竞态导致 evaluate 失败属正常；
+    // 返回空串由调用方继续轮询，真实失败会在后续提交判定中暴露，不升级 error 刷屏
+    logger.debug(`获取 Turnstile token 失败（按无 token 继续）: ${error.message}`);
     return '';
   }
 }
@@ -284,7 +286,8 @@ export async function waitForTurnstile(page, { config, logger = NOOP_LOGGER } = 
         maxFailuresPerProvider: config.TURNSTILE_PROVIDER_MAX_FAILURES,
       });
       const providerLabel = resolveTurnstileProviderLabel(result.providerName) || result.providerName;
-      logger.info(`Turnstile 由 ${providerLabel} 求解成功`);
+      // 求解成功摘要以主脚本 [步骤N] 日志行为准（info），此处 debug 保留同名信息避免重复输出
+      logger.debug(`Turnstile 由 ${providerLabel} 求解成功`);
 
       // 注入 token（含回调触发）——单次调用即完成「写字段 + 触发 data-callback」，
       // 避免回调被重复触发（注入逻辑见 src/turnstile.mjs 的 injectTurnstileToken）。

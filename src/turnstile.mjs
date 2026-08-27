@@ -695,13 +695,15 @@ export async function solveTurnstileWithFailover(
   }
 
   const chain = providers.map((p) => p.name).join(' → ');
-  logger.info(`Turnstile 多平台链路: ${chain}（每平台最多连续失败 ${maxFailuresPerProvider} 次后切换）`);
+  // 链路串已在主脚本启动段以 info 输出（含切换阈值），求解时降为 debug 避免每轮重复
+  logger.debug(`Turnstile 多平台链路: ${chain}（每平台最多连续失败 ${maxFailuresPerProvider} 次后切换）`);
 
-  // 启动时提示 AntiCaptcha 域名代理自动 Proxyless（避免用户误以为带代理任务）
+  // AntiCaptcha 域名代理自动 Proxyless 提示：主脚本启动段与实际求解时均以 info 输出，
+  // 此处（failover 入口）降 debug，同一运行最多两处 info 避免重复
   for (const p of providers) {
     if (p.name === 'AntiCaptcha' && p.proxyMode === 'hostname_skipped') {
       const masked = maskProxyAddress(config.PROXY_ADDRESS || '');
-      logger.info(
+      logger.debug(
         `ℹ️ AntiCaptcha 检测到域名代理 ${masked || ''}，将使用 Proxyless（官方 TurnstileTask 仅支持 IP）`,
       );
     }
