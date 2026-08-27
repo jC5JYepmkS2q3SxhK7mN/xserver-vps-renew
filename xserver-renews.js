@@ -2,7 +2,7 @@
 // @name         Extend VPS Expiration
 // @name:zh-CN   Xserver VPS 自动续期脚本
 // @namespace    http://greasyfork.org/
-// @version      1.0.6
+// @version      1.0.7
 // @description  Automatically renews the expiration date of free Xserver VPS.
 // @description:zh-CN 自动为 Xserver 的免费 VPS 续期。
 // @author       You
@@ -37,8 +37,8 @@
  * 1. 登录页面: 自动填充已保存的凭据并提交。
  * (Login Page: Auto-fills saved credentials and submits.)
  *
- * 2. VPS管理主页: 检查免费VPS到期（4GB 最长 24h；剩余 ≤12h 可续期）。今天/明天到期则跳转续期页。
- * (VPS Dashboard: 4GB max 24h; renew when remaining ≤12h. If expire is today/tomorrow, go to renew page.)
+ * 2. VPS管理主页: 检查免费VPS到期（4GB 最长 24h；剩余 ≤12h 可续期）。今天到期则跳转续期页。
+ * (VPS Dashboard: 4GB max 24h; renew when remaining ≤12h. If expire is today, go to renew page.)
  *
  * 3. 续期申请页: 自动点击“确认”按钮，进入验证码页面。
  * (Renewal Page: Clicks the confirmation button to proceed to the CAPTCHA page.)
@@ -234,10 +234,20 @@ function t(text) {
         closeBtn.className = 'vps-renewal-close';
         closeBtn.textContent = '✕';
         closeBtn.title = '关闭提示';
+        // 键盘可达：role=button + tabindex，Enter/Space 触发关闭（原为纯鼠标 span）
+        closeBtn.setAttribute('role', 'button');
+        closeBtn.setAttribute('tabindex', '0');
         closeBtn.setAttribute('aria-label', '关闭提示');
-        closeBtn.addEventListener('click', () => {
+        const dismissPanel = () => {
             clearAutoHide();
             removeStatusElement();
+        };
+        closeBtn.addEventListener('click', dismissPanel);
+        closeBtn.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                dismissPanel();
+            }
         });
         titleRow.appendChild(titleText);
         titleRow.appendChild(closeBtn);
@@ -365,11 +375,10 @@ function t(text) {
         updateStatusElement("正在检查续期状态...");
  
         try {
-            // 计算今天和明天的日期（东京时区，yyyy-mm-dd 格式）
+            // 计算今天日期（东京时区，yyyy-mm-dd 格式）
             // 使用 UTC+9 偏移计算，避免客户端本地时区 DST 切换导致日期偏差
             const tokyoTime = Date.now() + 9 * 3600000;
             const today = new Date(tokyoTime).toISOString().slice(0, 10);
-            const tomorrow = new Date(tokyoTime + 86400000).toISOString().slice(0, 10);
             const row = document.querySelector('tr:has(.freeServerIco)');
  
             if (!row) {
@@ -383,12 +392,12 @@ function t(text) {
  
             console.log(`${LOG_PREFIX} 页面上的到期日: ${expireDate || '未找到'}`);
             console.log(`${LOG_PREFIX} 今天的日期: ${today}`);
-            console.log(`${LOG_PREFIX} 明天的日期: ${tomorrow}`);
 
-            // 4GB 最长 24h、剩余 ≤12h 可续：日期粒度下今天或明天到期即尝试
-            const needsRenewal = expireDate === today || expireDate === tomorrow;
+            // 4GB 最长 24h、剩余 ≤12h 可续：日期粒度下「今天到期」才进入续期窗口
+            // （明天到期的窗口明天才开，提前访问只会命中官方「12時間前」拦截页，与主脚本 #5 判定一致）
+            const needsRenewal = expireDate === today;
             if (needsRenewal) {
-                console.log(`${LOG_PREFIX} 条件满足：到期日为今天或明天（续期窗口剩余≤12h）。正在跳转到续期页面...`);
+                console.log(`${LOG_PREFIX} 条件满足：到期日为今天（已进入剩余≤12h 续期窗口）。正在跳转到续期页面...`);
                 const detailLink = row.querySelector('a[href^="/xapanel/xvps/server/detail?id="]');
                 if (detailLink && detailLink.href) {
                     updateStatusElement("检测到即将过期，正在续期...", 'warn');
