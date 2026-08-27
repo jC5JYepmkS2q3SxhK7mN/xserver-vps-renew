@@ -172,6 +172,40 @@ describe('entrypoint.sh --once 优先于 CRON_SCHEDULE（#7）', () => {
   });
 });
 
+describe('show_cron_schedule 易读文案', () => {
+  /** 从 entrypoint.sh 提取真实函数并在 bash 中求值 */
+  function evalShowCronSchedule(expr) {
+    const src = readFileSync(ENTRYPOINT_SRC, 'utf8');
+    const fnMatch = src.match(/show_cron_schedule\(\) \{[\s\S]*?\n\}/);
+    expect(fnMatch, 'entrypoint.sh 应定义 show_cron_schedule()').toBeTruthy();
+    const r = spawnSync('bash', ['-c', `${fnMatch[0]}\nshow_cron_schedule "$1"`, '_', expr], {
+      encoding: 'utf8',
+      timeout: 5000,
+    });
+    expect(r.status, `bash 求值失败: ${r.stderr}`).toBe(0);
+    return r.stdout.trim();
+  }
+
+  it('每天固定时刻：30 20 * * * → 每天 20:30', () => {
+    expect(evalShowCronSchedule('30 20 * * *')).toContain('每天 20:30');
+  });
+
+  it('每 N 小时错峰 M 分（compose 默认 27 */4 * * *）→ 每 4 小时（逢第 27 分）', () => {
+    const out = evalShowCronSchedule('27 */4 * * *');
+    expect(out).toContain('每 4 小时');
+    expect(out).toContain('27 分');
+  });
+
+  it('分钟为 * 的每 N 小时：* */6 * * * → 每 6 小时', () => {
+    expect(evalShowCronSchedule('* */6 * * *')).toContain('每 6 小时');
+  });
+
+  it('无法识别的表达式回显原文', () => {
+    expect(evalShowCronSchedule('*/15 9-18 * * 1-5')).toContain('*/15 9-18 * * 1-5');
+    expect(evalShowCronSchedule('')).toContain('未设置定时');
+  });
+});
+
 describe('Supercronic PID 1 启动兼容性（#8）', () => {
   it('使用已修复的 Supercronic 版本，并通过绝对路径启动', () => {
     const dockerfile = readFileSync(DOCKERFILE_SRC, 'utf8');

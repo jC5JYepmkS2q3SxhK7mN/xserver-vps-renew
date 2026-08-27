@@ -47,12 +47,25 @@ show_cron_schedule() {
     minute=$(echo "$cron_expr" | awk '{print $1}')
     hour=$(echo "$cron_expr" | awk '{print $2}')
 
-    # 如果是简单的时间表达式（如 "30 20 * * *"），显示易读格式
+    # 每天固定时刻（如 "30 20 * * *"），显示易读格式
     if [[ "$minute" =~ ^[0-9]+$ ]] && [[ "$hour" =~ ^[0-9]+$ ]]; then
         echo "每天 $(printf "%02d:%02d" "$hour" "$minute") (容器本地时间 - 东京)"
-    else
-        echo "$cron_expr (容器本地时间)"
+        return
     fi
+
+    # 每 N 小时错峰 M 分（如 compose 默认 "27 */4 * * *"）
+    if [[ "$minute" =~ ^[0-9]+$ ]] && [[ "$hour" =~ ^\*/([0-9]+)$ ]]; then
+        echo "每 ${BASH_REMATCH[1]} 小时（逢第 ${minute} 分，容器本地时间 - 东京）"
+        return
+    fi
+
+    # 每 N 小时（分钟为 *，如 "* */4 * * *"）
+    if [ "$minute" = "*" ] && [[ "$hour" =~ ^\*/([0-9]+)$ ]]; then
+        echo "每 ${BASH_REMATCH[1]} 小时 (容器本地时间 - 东京)"
+        return
+    fi
+
+    echo "$cron_expr (容器本地时间)"
 }
 
 # ============================================================
