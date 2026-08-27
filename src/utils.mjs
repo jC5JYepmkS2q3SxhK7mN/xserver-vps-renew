@@ -261,6 +261,33 @@ export function escapeHtml(str) {
 }
 
 /**
+ * formatLogTimestamp 的 DateTimeFormat 缓存（按 timeZone 复用）
+ * Intl.DateTimeFormat 构造是日志输出路径上最重的对象，每条日志新建不划算；
+ * tz 实际取值仅 TZ 环境变量一两种，缓存基数极小无需上限
+ */
+const LOG_TIMESTAMP_FORMATTERS = new Map();
+
+/** 按 timeZone 取（或惰性创建）共享的日志时间戳 formatter */
+function getLogTimestampFormatter(tz) {
+  let formatter = LOG_TIMESTAMP_FORMATTERS.get(tz);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+      hourCycle: 'h23',
+    });
+    LOG_TIMESTAMP_FORMATTERS.set(tz, formatter);
+  }
+  return formatter;
+}
+
+/**
  * 格式化日志时间戳（YYYY-MM-DD HH:mm:ss，时区取 TZ 环境变量，默认 Asia/Tokyo）
  * locale 无关、固定宽度，避免不同 Node 版本 toLocaleString 输出漂移（如年份格式/24 点制差异）
  * @param {number|Date} [when=Date.now()]
@@ -269,17 +296,7 @@ export function escapeHtml(str) {
  */
 export function formatLogTimestamp(when = Date.now(), tz = process.env.TZ || 'Asia/Tokyo') {
   const d = when instanceof Date ? when : new Date(when);
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-    hourCycle: 'h23',
-  }).formatToParts(d);
+  const parts = getLogTimestampFormatter(tz).formatToParts(d);
   const get = (type) => parts.find((p) => p.type === type)?.value || '';
   return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`;
 }

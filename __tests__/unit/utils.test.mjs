@@ -213,6 +213,33 @@ describe('formatLogTimestamp', () => {
     const utc = Date.UTC(2026, 6, 10, 15, 0, 0);
     expect(formatLogTimestamp(utc, 'UTC')).toBe('2026-07-10 15:00:00');
   });
+
+  it('同一时区复用缓存的 DateTimeFormat（不重复构造 Intl 对象）', () => {
+    // 手动包装构造器（spyOn 无法正确代理 new 构造）：返回真实实例并记录入参
+    const Original = Intl.DateTimeFormat;
+    const constructed = [];
+    Intl.DateTimeFormat = function (locale, opts) {
+      constructed.push(opts);
+      return new Original(locale, opts);
+    };
+    try {
+      const utc = Date.UTC(2026, 6, 10, 15, 0, 0);
+      // Asia/Tokyo 已被本文件早前用例入缓存：两次调用均不应再构造
+      formatLogTimestamp(utc, 'Asia/Tokyo');
+      formatLogTimestamp(utc, 'Asia/Tokyo');
+      expect(
+        constructed.filter((o) => o?.timeZone === 'Asia/Tokyo'),
+      ).toHaveLength(0);
+      // 本文件未使用过的新时区：仅首次构造，第二次命中缓存
+      formatLogTimestamp(utc, 'Asia/Shanghai');
+      formatLogTimestamp(utc, 'Asia/Shanghai');
+      expect(
+        constructed.filter((o) => o?.timeZone === 'Asia/Shanghai'),
+      ).toHaveLength(1);
+    } finally {
+      Intl.DateTimeFormat = Original;
+    }
+  });
 });
 
 describe('analyzeFingerprintHealth', () => {
