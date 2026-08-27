@@ -355,6 +355,8 @@ async function main() {
     + `${CONFIG.TG_NOTIFY_SKIP ? '' : '（跳过类不推送）'}`
     + `${CONFIG.TG_BOT_TOKEN && CONFIG.TG_CHAT_ID ? ' | Telegram 已配置' : ' | Telegram 未配置'}`,
   );
+  // 运行环境：排障第一手信息（Node 版本差异曾造成 Intl/语法行为偏差，平台决定 Chrome 探测路径）
+  log(`运行环境: Node ${process.version} | ${process.platform}/${process.arch}`);
 
   const configErrors = validateRequiredConfig(CONFIG);
   if (configErrors.length > 0) {
