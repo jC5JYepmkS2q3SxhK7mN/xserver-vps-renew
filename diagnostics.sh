@@ -66,6 +66,32 @@ echo "  磁盘剩余: $(df -h /tmp 2>/dev/null | awk 'NR==2{print $4}' || echo '
 echo "  Chrome: $(google-chrome-stable --version 2>/dev/null || echo '未安装')"
 echo "  Node: $(node --version 2>/dev/null || echo '未安装')"
 
+# 状态文件目录可写性探测：挂载卷权限不足时 writeRenewalStatus 只能在运行中失败，
+# 提前在诊断阶段暴露（连续失败统计/告警升级均依赖状态文件持久化）
+check_status_file_writability() {
+  local status_file="${RENEWAL_STATUS_FILE:-/data/chrome-profile/renewal-status.json}"
+  local status_dir
+  status_dir=$(dirname "$status_file")
+  echo "  状态文件: $status_file"
+  if [ ! -d "$status_dir" ]; then
+    echo "  目录: 不存在（首次运行时将自动创建）"
+  elif [ -w "$status_dir" ]; then
+    echo "  目录: 可写"
+  else
+    echo "  目录: ❌ 不可写（续期记录无法持久化，请检查挂载卷属主/权限）"
+  fi
+  if [ -f "$status_file" ]; then
+    if [ -w "$status_file" ]; then
+      echo "  文件: 已存在且可写"
+    else
+      echo "  文件: ❌ 已存在但不可写（writeRenewalStatus 将失败）"
+    fi
+  fi
+}
+
+echo "💾 状态持久化:"
+check_status_file_writability
+
 echo "🎯 关键 API 连通性:"
 # Keras 验证码识别（Cloud Run）：冷启动/不可达是续期失败高频根因。
 # GET 可能返回 405（端点仅接受 POST），有 HTTP 响应即视为可达。
