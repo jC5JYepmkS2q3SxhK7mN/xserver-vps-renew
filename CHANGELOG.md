@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### 迭代（2026-08-27）
+- **性能：日志时间戳 formatter 缓存**：`formatLogTimestamp` 原每条日志新建 `Intl.DateTimeFormat`（日志路径上最重的对象），改为按 timeZone 惰性缓存复用；tz 取值仅 `TZ` 一两种，缓存基数极小无需上限（新增缓存命中用例）
+- **性能：提交结果轮询自适应退避**：新增 `panel-flow.resolveSubmissionPollIntervalMs`——提交后前 10s（成功/失败信号最常见窗口）保持 base 间隔，10-30s 退避 1s、30s 后退避 2s；`waitForSubmissionResult` 固定 400ms 跑满 120s ≈300 次 CDP evaluate 往返，退避后 ≈90 次（降约 70%），判定语义与提前返回行为不变（新增 5 用例）
+- **日志降噪：轮询路径与重复摘要**：`getTurnstileToken` 在轮询/软等待中被反复调用，evaluate 失败（导航竞态）由 error 降为 debug；「Turnstile 由 X 求解成功」（主脚本 `[步骤N]` 已含）、failover 链路串与 AntiCaptcha 域名代理提示（启动段/求解时已 info）在 turnstile-flow / failover 入口降 debug，消除同信息双/三处输出（新增 2 用例）
+- **友好度：TURNSTILE_PROVIDER_ORDER 拼写错误告警**：新增 `turnstile.listUnknownTurnstileProviderNames`，平台名拼错（如 `CapSolvr`）原被静默忽略导致 failover 链路悄悄变短，启动即 warn 列出未识别项与可用平台（新增 4 用例）
+- **友好度：cron 调度易读文案扩展**：`entrypoint.sh show_cron_schedule` 新增「分钟固定 + 小时 */N」（compose 默认 `27 */4 * * *` → `每 4 小时（逢第 27 分…）`）与「* + */N」两种格式，原样回显兜底（新增 4 用例，bash 运行时求值真实函数）
+- **排障：diagnostics.sh 状态文件可写性探测**：新增「💾 状态持久化」段——目录不存在/可写/不可写与文件不可写四态明示，挂载卷权限不足由运行中炸错提前到诊断阶段暴露（新增 5 用例，新测试文件 diagnostics.statusFile.test.mjs）
+- **排障：启动日志运行环境行**：启动横幅新增 `运行环境: Node vX | platform/arch`（Node 版本差异曾造成 Intl/语法行为偏差，平台决定 Chrome 探测路径）
+- **用户脚本：续期判定对齐主脚本 #5**：`xserver-renews.js` 原「今天或明天到期即跳转续期页」，明天到期的续期窗口明天才开，提前访问只命中官方「12時間前」拦截页；改为仅今天到期跳转，删除死变量 tomorrow；状态面板 ✕ 关闭按钮键盘可达（role=button + tabindex + Enter/Space）；版本 1.0.6 → 1.0.7
+- **文案/健壮性打包**：失败通知加粗标签 `<strong>` 统一为 `<b>`（新增断言）；`notify()` JSDoc kind 补 `manual_confirm`；`handleCaptchaPage` 重试次数下限 1 且循环兜底改为显式 throw（消除静默返回 undefined 被当作成功元数据的边界）
+- 验证：`node --check` 全仓 + 25 文件 / 479 用例全绿（净增 21 用例），覆盖率门禁达标（分支 60%+）；浏览器流程模块沿用既有「依赖真实页面无单测」政策
+
 ### 迭代（2026-08-14）
 - **安全：修复 Dependabot alert GHSA-jmr9-qjv8-65gv（high）**：`extract-zip <= 2.0.1` 符号链接路径遍历（CVE-2026-56876）影响全部已发布版本、上游暂无修复版；经 `overrides` 将传递依赖 `@puppeteer/browsers` 由 `2.10.3` 强制升至 `3.2.0`（改用 `modern-tar` 解压，彻底移除 `extract-zip` 依赖链）。已核对 `rebrowser-puppeteer-core` 所需的 14 个导出符号（`launch`/`computeExecutablePath`/`resolveBuildId`/`createProfile`/`TimeoutError` 等）在 3.x 全部保留；`Browser` enum 与 2.x 一致
 - **安全：nanoid 漏洞顺带修复**：`npm audit` 检出 dev 链 `vitest → vite → postcss → nanoid@3.3.16` 的 GHSA-2v37-7h3g-55p8（high，size=0 时自定义生成器死循环），`overrides` 强制 `nanoid@3.3.18`（同 major 修复版）
