@@ -485,8 +485,8 @@ export async function handleCaptchaPage(page, options = {}, { config, logger = N
   logger.info('正在处理验证码页面...');
   const renewUrl = typeof options?.renewUrl === 'string' ? options.renewUrl : null;
 
-  // 最多重试 3 次（验证码识别错误时刷新重试）
-  const maxRetries = config.CAPTCHA_MAX_RETRY || 3;
+  // 最多重试 3 次（验证码识别错误时刷新重试）；下限 1 保证循环至少执行一次
+  const maxRetries = Math.max(1, Number(config.CAPTCHA_MAX_RETRY) || 3);
   let lastError = null;
   /** @type {{ turnstileProvider: string|null, turnstileAttempts: object[] }} */
   let lastTurnstileMeta = { turnstileProvider: null, turnstileAttempts: [] };
@@ -613,8 +613,7 @@ export async function handleCaptchaPage(page, options = {}, { config, logger = N
     }
   }
 
-  // 如果循环结束仍未成功（理论上不会走到这里）
-  if (lastError) {
-    throw lastError;
-  }
+  // 循环各路径均显式 return/throw，正常不会到达此处；
+  // 防御异常控制流（如未来改动），避免静默返回 undefined 被调用方当作成功元数据处理
+  throw lastError || new Error('验证码流程异常结束（未产生明确结果）');
 }
