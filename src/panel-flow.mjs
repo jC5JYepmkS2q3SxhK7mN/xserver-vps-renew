@@ -386,9 +386,39 @@ async function navigateForCaptchaRetry(page, currentUrl, renewUrl, { config, log
   await waitForSelectorSoft(page, 'img[src^="data:"]', 3000, logger);
 }
 
+/** 提交结果轮询的自适应退避阈值：早期窗口（毫秒），此期间保持基础间隔灵敏探测 */
+const SUBMISSION_POLL_DENSE_WINDOW_MS = 10_000;
+/** 中期窗口（毫秒）：超过后进入稀疏轮询（官方处理需 60-90s，后期密轮询无收益） */
+const SUBMISSION_POLL_SPARSE_WINDOW_MS = 30_000;
+/** 中期轮询间隔下限（毫秒） */
+const SUBMISSION_POLL_MID_INTERVAL_MS = 1_000;
+/** 后期轮询间隔下限（毫秒） */
+const SUBMISSION_POLL_LATE_INTERVAL_MS = 2_000;
+
+/**
+ * 提交结果轮询间隔自适应退避（纯函数）
+ * 提交后前 10s 是成功/失败信号最常见窗口，保持 base 间隔灵敏度；
+ * 官方 /extend/do 处理需 60-90s，中后期每次轮询都是一次 CDP evaluate 往返，
+ * 固定 400ms 跑满 120s ≈ 300 次往返；退避后 ≈90 次（降约 70%）且判定语义不变
+ * @param {number} elapsedMs - 距轮询开始的毫秒数
+ * @param {number} baseIntervalMs - 调用方基础间隔
+ * @returns {number} 本轮应睡眠的毫秒数
+ */
+export function resolveSubmissionPollIntervalMs(elapsedMs, baseIntervalMs) {
+  const base = Math.max(1, Number(baseIntervalMs) || 400);
+  const elapsed = Math.max(0, Number(elapsedMs) || 0);
+  if (elapsed >= SUBMISSION_POLL_SPARSE_WINDOW_MS) {
+    return Math.max(base, SUBMISSION_POLL_LATE_INTERVAL_MS);
+  }
+  if (elapsed >= SUBMISSION_POLL_DENSE_WINDOW_MS) {
+    return Math.max(base, SUBMISSION_POLL_MID_INTERVAL_MS);
+  }
+  return base;
+}
+
 /**
  * 提交后轮询等待续期结果（替代固定 sleep(2000)）
- * 每 intervalMs 读取一次页面正文与 URL 并评估：
+ * 每 intervalMs 读取一次页面正文与 URL 并评估（间隔随 elapsed 自适应退避）：
  * - success / retry（服务端已响应的明确结果）立即返回，避免无谓空等
  * - pending（仍停留确认页无失败标识，服务端处理中）/ fail 持续轮询至 timeoutMs——
  *   实机提交后官方处理需 60-90s，页面停留 conf 期间不代表失败，过早判定并重试会
@@ -418,7 +448,7 @@ export async function waitForSubmissionResult(
     //   正文为 conf 表单），此时 fail「状态不明确」不代表最终结果，提前终止会把
     //   本可成功的提交误判为不可重试失败
     if (evaluation.status === 'success' || evaluation.status === 'retry') break;
-    await sleep(intervalMs);
+    await sleep(resolveSubmissionPollIntervalMs(Date.now() - startedAt, intervalMs));
   }
 
   // 超时仍停留在确认页（pending）：服务端未在窗口内响应，按可重试失败归一化

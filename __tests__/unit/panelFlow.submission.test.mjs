@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { waitForSubmissionResult } from '../../src/panel-flow.mjs';
+import { waitForSubmissionResult, resolveSubmissionPollIntervalMs } from '../../src/panel-flow.mjs';
 
 /** 构造最小 page 桩：evaluate 返回正文，url 返回当前地址 */
 function makePage({ text, url }) {
@@ -151,5 +151,32 @@ describe('waitForSubmissionResult', () => {
     });
     expect(evaluation.status).toBe('success');
     expect(evaluation.matched).toBe('xvps/index');
+  });
+});
+
+describe('resolveSubmissionPollIntervalMs', () => {
+  it('前 10s 密集窗口保持基础间隔（成功信号最常见，灵敏度不变）', () => {
+    expect(resolveSubmissionPollIntervalMs(0, 400)).toBe(400);
+    expect(resolveSubmissionPollIntervalMs(9_999, 400)).toBe(400);
+  });
+
+  it('10s-30s 中期窗口退避到 1s 下限', () => {
+    expect(resolveSubmissionPollIntervalMs(10_000, 400)).toBe(1_000);
+    expect(resolveSubmissionPollIntervalMs(29_999, 400)).toBe(1_000);
+  });
+
+  it('30s 后稀疏窗口退避到 2s 下限（官方处理 60-90s，后期密轮询无收益）', () => {
+    expect(resolveSubmissionPollIntervalMs(30_000, 400)).toBe(2_000);
+    expect(resolveSubmissionPollIntervalMs(119_000, 400)).toBe(2_000);
+  });
+
+  it('基础间隔大于退避下限时保持基础间隔（不退化为更密）', () => {
+    expect(resolveSubmissionPollIntervalMs(15_000, 5_000)).toBe(5_000);
+    expect(resolveSubmissionPollIntervalMs(60_000, 5_000)).toBe(5_000);
+  });
+
+  it('非法入参回退默认 400ms', () => {
+    expect(resolveSubmissionPollIntervalMs(Number.NaN, Number.NaN)).toBe(400);
+    expect(resolveSubmissionPollIntervalMs(-5, 0)).toBe(400);
   });
 });
