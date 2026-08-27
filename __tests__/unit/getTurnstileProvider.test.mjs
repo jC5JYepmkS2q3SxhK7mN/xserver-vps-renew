@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   getTurnstileProvider,
   listTurnstileProviders,
+  listUnknownTurnstileProviderNames,
   resolveYesCaptchaApiBase,
   resolveYesCaptchaTaskType,
   YESCAPTCHA_DEFAULT_API_BASE,
@@ -217,5 +218,26 @@ describe('resolveYesCaptchaTaskType', () => {
 
   it('未知类型回退默认', () => {
     expect(resolveYesCaptchaTaskType('TurnstileTask')).toBe(YESCAPTCHA_DEFAULT_TASK_TYPE);
+  });
+});
+
+describe('listUnknownTurnstileProviderNames', () => {
+  it('空值/未配置返回空数组', () => {
+    expect(listUnknownTurnstileProviderNames('')).toEqual([]);
+    expect(listUnknownTurnstileProviderNames(undefined)).toEqual([]);
+    expect(listUnknownTurnstileProviderNames(null)).toEqual([]);
+  });
+
+  it('全部可识别（含别名与大小写）返回空数组', () => {
+    expect(listUnknownTurnstileProviderNames('CapSolver,AntiCaptcha,YesCaptcha,2Captcha')).toEqual([]);
+    expect(listUnknownTurnstileProviderNames('capsolver, anti, yes, twocaptcha')).toEqual([]);
+  });
+
+  it('拼写错误的平台名按原样列出（暴露静默忽略）', () => {
+    expect(listUnknownTurnstileProviderNames('CapSolvr,YesCaptcha,FooBar')).toEqual(['CapSolvr', 'FooBar']);
+  });
+
+  it('空片段跳过，分隔符支持逗号与竖线', () => {
+    expect(listUnknownTurnstileProviderNames('CapSolver,,|Bad|')).toEqual(['Bad']);
   });
 });

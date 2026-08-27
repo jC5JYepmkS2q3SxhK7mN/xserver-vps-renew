@@ -45,8 +45,10 @@ import {
 // Turnstile 求解（纯函数 + API）
 import {
   listTurnstileProviders,
+  listUnknownTurnstileProviderNames,
   resolveAntiCaptchaProxyMode,
   DEFAULT_TURNSTILE_PROVIDER_MAX_FAILURES,
+  DEFAULT_TURNSTILE_PROVIDER_ORDER,
 } from './src/turnstile.mjs';
 // 续期记录持久化
 import {
@@ -383,6 +385,14 @@ async function main() {
 
   {
     const tsProviders = listTurnstileProviders(CONFIG);
+    // 平台名拼写错误在解析时被静默忽略（failover 链路悄悄变短），启动即告警暴露
+    const unknownProviders = listUnknownTurnstileProviderNames(CONFIG.TURNSTILE_PROVIDER_ORDER);
+    if (unknownProviders.length > 0) {
+      logWarn(
+        `⚠️ TURNSTILE_PROVIDER_ORDER 含无法识别的平台名（已忽略）: ${unknownProviders.join(' / ')}`
+        + `（可用: ${DEFAULT_TURNSTILE_PROVIDER_ORDER.join(', ')}）`,
+      );
+    }
     if (tsProviders.length === 0) {
       logWarn('⚠️ 未配置任何 Turnstile 打码平台密钥：将依赖自然通过，成功率极低（Docker 几乎不可用）。推荐至少配置 CAPSOLVER_API_KEY，并另配 ANTICAPTCHA_API_KEY 作异构备份');
     } else {

@@ -133,6 +133,24 @@ export function parseTurnstileProviderOrder(orderStr) {
 }
 
 /**
+ * 列出 TURNSTILE_PROVIDER_ORDER 中无法识别的原始名称（纯函数）
+ * 解析时非法项被静默忽略，拼写错误（如 CapSolvr）会让 failover 链路悄悄变短；
+ * 启动时以此清单 warn 提示，把静默配置错误暴露出来
+ * @param {string|undefined} orderStr
+ * @returns {string[]} 未识别的原始项（去空白，保持原顺序）
+ */
+export function listUnknownTurnstileProviderNames(orderStr) {
+  if (!orderStr || typeof orderStr !== 'string') return [];
+  const unknown = [];
+  for (const part of orderStr.split(/[,|]/)) {
+    const raw = part.trim();
+    if (!raw) continue;
+    if (!normalizeProviderName(raw)) unknown.push(raw);
+  }
+  return unknown;
+}
+
+/**
  * 判断代理地址是否为 IP（IPv4 / IPv6）
  * Anti-Captcha 官方 TurnstileTask 仅支持 IP，不支持域名（如 proxy.example.com）
  * 文档：https://anti-captcha.com/apidoc/task-types/TurnstileTask
